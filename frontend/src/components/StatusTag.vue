@@ -5,6 +5,7 @@ import {
   credentialStatusType,
   networkStatusLabel,
   networkStatusType,
+  nodeStatusLabel,
 } from "@/utils/format";
 
 const props = defineProps<{
@@ -28,14 +29,7 @@ const tagType = computed(() => {
 const label = computed(() => {
   if (props.kind === "network") return networkStatusLabel(props.status);
   if (props.kind === "credential") return credentialStatusLabel(props.status);
-  switch (props.status) {
-    case "online":
-      return "在线";
-    case "offline":
-      return "离线";
-    default:
-      return "未知";
-  }
+  return nodeStatusLabel(props.status);
 });
 </script>
 

@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { computed, h, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
-import {
-  NIcon,
-  type MenuOption,
-  type DropdownOption,
-} from "naive-ui";
+import { useI18n } from "vue-i18n";
+import { NIcon, type MenuOption, type DropdownOption } from "naive-ui";
 import {
   GridOutline,
   GitNetworkOutline,
@@ -17,27 +14,30 @@ import {
   LogOutOutline,
   PersonCircleOutline,
   MenuOutline,
+  LanguageOutline,
 } from "@vicons/ionicons5";
 import { useAuthStore } from "@/stores/auth";
 import { isDark, toggleTheme } from "@/utils/theme";
 import { dialog } from "@/utils/feedback";
+import { SUPPORTED_LOCALES, getLocale, setLocale, type AppLocale } from "@/i18n";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const { t } = useI18n();
 const collapsed = ref(false);
 
 function renderIcon(icon: typeof GridOutline) {
   return () => h(NIcon, null, { default: () => h(icon) });
 }
 
-const menuOptions: MenuOption[] = [
-  { label: "概览", key: "dashboard", icon: renderIcon(GridOutline) },
-  { label: "网络管理", key: "networks", icon: renderIcon(GitNetworkOutline) },
-  { label: "凭据管理", key: "credentials", icon: renderIcon(KeyOutline) },
-  { label: "日志中心", key: "logs", icon: renderIcon(DocumentTextOutline) },
-  { label: "系统设置", key: "settings", icon: renderIcon(SettingsOutline) },
-];
+const menuOptions = computed<MenuOption[]>(() => [
+  { label: t("nav.dashboard"), key: "dashboard", icon: renderIcon(GridOutline) },
+  { label: t("nav.networks"), key: "networks", icon: renderIcon(GitNetworkOutline) },
+  { label: t("nav.credentials"), key: "credentials", icon: renderIcon(KeyOutline) },
+  { label: t("nav.logs"), key: "logs", icon: renderIcon(DocumentTextOutline) },
+  { label: t("nav.settings"), key: "settings", icon: renderIcon(SettingsOutline) },
+]);
 
 const activeKey = computed(() => {
   const name = route.name as string;
@@ -56,21 +56,13 @@ const userOptions = computed<DropdownOption[]>(() => [
     icon: renderIcon(PersonCircleOutline),
   },
   { type: "divider", key: "d1" },
-  { label: "修改密码", key: "password", icon: renderIcon(SettingsOutline) },
-  { label: "退出登录", key: "logout", icon: renderIcon(LogOutOutline) },
+  { label: t("nav.changePassword"), key: "password", icon: renderIcon(SettingsOutline) },
+  { label: t("nav.logout"), key: "logout", icon: renderIcon(LogOutOutline) },
 ]);
 
 function roleLabel(role?: string) {
-  switch (role) {
-    case "admin":
-      return "管理员";
-    case "operator":
-      return "运维";
-    case "viewer":
-      return "访客";
-    default:
-      return role ?? "";
-  }
+  if (role === "admin" || role === "operator" || role === "viewer") return t(`role.${role}`);
+  return role ?? "";
 }
 
 function handleUserSelect(key: string) {
@@ -78,10 +70,10 @@ function handleUserSelect(key: string) {
     router.push({ name: "settings", query: { tab: "security" } });
   } else if (key === "logout") {
     dialog.warning({
-      title: "退出登录",
-      content: "确定要退出当前账号吗？",
-      positiveText: "退出",
-      negativeText: "取消",
+      title: t("common.logoutConfirmTitle"),
+      content: t("common.logoutConfirmContent"),
+      positiveText: t("common.logoutConfirmPositive"),
+      negativeText: t("common.cancel"),
       onPositiveClick: async () => {
         await auth.logout();
         router.push({ name: "login" });
@@ -90,7 +82,30 @@ function handleUserSelect(key: string) {
   }
 }
 
-const pageTitle = computed(() => (route.meta.title as string) ?? "EasyTier 控制台");
+const localeOptions = SUPPORTED_LOCALES.map((l) => ({ label: l.label, key: l.value }));
+const currentLocale = ref<AppLocale>(getLocale());
+const localeLabel = computed(
+  () => SUPPORTED_LOCALES.find((l) => l.value === currentLocale.value)?.label ?? "",
+);
+
+function handleLocale(key: string) {
+  currentLocale.value = key as AppLocale;
+  setLocale(key as AppLocale);
+}
+
+const pageTitle = computed(() => {
+  const name = route.name as string;
+  const map: Record<string, string> = {
+    dashboard: "nav.dashboard",
+    networks: "nav.networks",
+    "network-detail": "nav.networks",
+    credentials: "nav.credentials",
+    logs: "nav.logs",
+    settings: "nav.settings",
+  };
+  const key = map[name];
+  return key ? t(key) : t("app.subtitle");
+});
 </script>
 
 <template>
@@ -109,8 +124,8 @@ const pageTitle = computed(() => (route.meta.title as string) ?? "EasyTier 控�
         <div class="brand-logo">ET</div>
         <transition name="fade">
           <div v-if="!collapsed" class="brand-text">
-            <div class="brand-title">EasyTier 控制台</div>
-            <div class="brand-sub">网络与节点管理平台</div>
+            <div class="brand-title">{{ t("app.title") }}</div>
+            <div class="brand-sub">{{ t("app.subtitle") }}</div>
           </div>
         </transition>
       </div>
@@ -133,6 +148,12 @@ const pageTitle = computed(() => (route.meta.title as string) ?? "EasyTier 控�
           <h2 class="header-title">{{ pageTitle }}</h2>
         </div>
         <div class="header-right">
+          <n-dropdown :options="localeOptions" trigger="click" @select="handleLocale">
+            <n-button quaternary size="small">
+              <template #icon><n-icon :component="LanguageOutline" /></template>
+              {{ localeLabel }}
+            </n-button>
+          </n-dropdown>
           <n-button quaternary circle size="small" @click="toggleTheme">
             <template #icon>
               <n-icon :component="isDark ? SunnyOutline : MoonOutline" />

@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import type { FormInst, FormRules } from "naive-ui";
 import { ShieldCheckmarkOutline } from "@vicons/ionicons5";
+import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { useAuthStore } from "@/stores/auth";
 import { message } from "@/utils/feedback";
 import { extractError } from "@/api/client";
 
 const router = useRouter();
 const auth = useAuthStore();
+const { t } = useI18n();
 const formRef = ref<FormInst | null>(null);
 const loading = ref(false);
 
@@ -20,18 +23,18 @@ const model = reactive({
   confirm: "",
 });
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   username: [
-    { required: true, message: "请输入管理员用户名", trigger: ["blur", "input"] },
+    { required: true, message: t("auth.rules.usernameRequired"), trigger: ["blur", "input"] },
     {
       pattern: /^[A-Za-z0-9_.-]{3,32}$/,
-      message: "3-32 位字母、数字、下划线、点或短横线",
+      message: t("auth.rules.usernamePattern"),
       trigger: ["blur", "input"],
     },
   ],
   password: [
-    { required: true, message: "请输入密码", trigger: ["blur", "input"] },
-    { min: 12, message: "密码长度至少 12 位", trigger: ["blur", "input"] },
+    { required: true, message: t("auth.rules.passwordRequired"), trigger: ["blur", "input"] },
+    { min: 12, message: t("auth.rules.passwordMin"), trigger: ["blur", "input"] },
     {
       validator: (_rule, value: string) => {
         if (!value) return false;
@@ -42,19 +45,19 @@ const rules: FormRules = {
           /[^A-Za-z0-9]/.test(value)
         );
       },
-      message: "需同时包含大写、小写、数字和特殊字符",
+      message: t("auth.rules.passwordComplex"),
       trigger: ["blur", "input"],
     },
   ],
   confirm: [
     {
       validator: (_rule, value: string) => value === model.password,
-      message: "两次输入的密码不一致",
+      message: t("auth.rules.confirmMismatch"),
       trigger: ["blur", "input"],
     },
   ],
-  email: [{ type: "email", message: "邮箱格式不正确", trigger: ["blur"] }],
-};
+  email: [{ type: "email", message: t("auth.rules.emailInvalid"), trigger: ["blur"] }],
+}));
 
 const strength = computed(() => {
   const v = model.password;
@@ -67,9 +70,7 @@ const strength = computed(() => {
   return Math.min(score, 5);
 });
 
-const strengthLabel = computed(
-  () => ["非常弱", "弱", "一般", "较强", "强", "很强"][strength.value],
-);
+const strengthLabel = computed(() => t(`auth.strength.labels.${strength.value}`));
 const strengthColor = computed(
   () => ["#e5484d", "#e5484d", "#f5a524", "#2563eb", "#0d9488", "#16a34a"][strength.value],
 );
@@ -88,7 +89,7 @@ async function submit() {
       displayName: model.displayName || undefined,
       email: model.email || undefined,
     });
-    message.success("管理员账号创建成功，欢迎使用 EasyTier 控制台");
+    message.success(t("auth.setupSuccess"));
     router.push({ name: "dashboard" });
   } catch (err) {
     message.error(extractError(err));
@@ -100,13 +101,14 @@ async function submit() {
 
 <template>
   <div class="auth-page">
+    <LanguageSwitcher class="lang-corner" />
     <n-card class="auth-card" :bordered="false">
       <div class="auth-head">
         <div class="auth-logo">
           <n-icon :component="ShieldCheckmarkOutline" :size="26" />
         </div>
-        <h1>初始化控制台</h1>
-        <p>首次使用，请创建管理员账号。密码采用 Argon2id 强加密存储。</p>
+        <h1>{{ t("auth.setupTitle") }}</h1>
+        <p>{{ t("auth.setupSubtitle") }}</p>
       </div>
       <n-form
         ref="formRef"
@@ -116,23 +118,23 @@ async function submit() {
         size="large"
         @keydown.enter.prevent="submit"
       >
-        <n-form-item label="管理员用户名" path="username">
-          <n-input v-model:value="model.username" placeholder="例如 admin" />
+        <n-form-item :label="t('auth.adminUsername')" path="username">
+          <n-input v-model:value="model.username" :placeholder="t('auth.adminUsernamePlaceholder')" />
         </n-form-item>
         <n-grid :cols="2" :x-gap="12">
-          <n-form-item-gi label="显示名称（可选）">
-            <n-input v-model:value="model.displayName" placeholder="网络管理员" />
+          <n-form-item-gi :label="t('auth.displayName')">
+            <n-input v-model:value="model.displayName" :placeholder="t('auth.displayNamePlaceholder')" />
           </n-form-item-gi>
-          <n-form-item-gi label="邮箱（可选）" path="email">
-            <n-input v-model:value="model.email" placeholder="admin@example.com" />
+          <n-form-item-gi :label="t('auth.email')" path="email">
+            <n-input v-model:value="model.email" :placeholder="t('auth.emailPlaceholder')" />
           </n-form-item-gi>
         </n-grid>
-        <n-form-item label="密码" path="password">
+        <n-form-item :label="t('auth.password')" path="password">
           <n-input
             v-model:value="model.password"
             type="password"
             show-password-on="click"
-            placeholder="至少 12 位，含大小写、数字与特殊字符"
+            :placeholder="t('auth.passwordPolicyPlaceholder')"
           />
         </n-form-item>
         <div class="strength">
@@ -149,16 +151,16 @@ async function submit() {
             {{ strengthLabel }}
           </span>
         </div>
-        <n-form-item label="确认密码" path="confirm">
+        <n-form-item :label="t('auth.confirmPassword')" path="confirm">
           <n-input
             v-model:value="model.confirm"
             type="password"
             show-password-on="click"
-            placeholder="再次输入密码"
+            :placeholder="t('auth.confirmPasswordPlaceholder')"
           />
         </n-form-item>
         <n-button type="primary" block size="large" :loading="loading" @click="submit">
-          创建管理员并进入控制台
+          {{ t("auth.createAdmin") }}
         </n-button>
       </n-form>
     </n-card>
@@ -175,6 +177,11 @@ async function submit() {
   background: radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.16), transparent 45%),
     radial-gradient(circle at 80% 70%, rgba(13, 148, 136, 0.16), transparent 45%),
     var(--et-bg);
+}
+.lang-corner {
+  position: fixed;
+  top: 16px;
+  right: 16px;
 }
 :global(.dark) .auth-page {
   background: radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.22), transparent 45%),

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { formatTime } from "@/utils/format";
 
 export interface LogLine {
@@ -19,6 +20,8 @@ const props = withDefaults(
   { height: 460, showFilter: true, autoScroll: true },
 );
 
+const { t } = useI18n();
+
 const levelFilter = ref<string | null>(null);
 const search = ref("");
 const scroller = ref<HTMLElement | null>(null);
@@ -32,14 +35,14 @@ const filtered = computed(() =>
   }),
 );
 
-const levelOptions = [
-  { label: "全部级别", value: "" },
+const levelOptions = computed(() => [
+  { label: t("logs.allLevels"), value: "" },
   { label: "TRACE", value: "trace" },
   { label: "DEBUG", value: "debug" },
   { label: "INFO", value: "info" },
   { label: "WARN", value: "warn" },
   { label: "ERROR", value: "error" },
-];
+]);
 
 function levelClass(level: string) {
   return `lv-${level}`;
@@ -68,19 +71,19 @@ watch(() => props.lines, () => scrollToBottom(), { deep: false });
         size="small"
         style="width: 130px"
         clearable
-        placeholder="全部级别"
+        :placeholder="t('logs.allLevels')"
       />
       <n-input
         v-model:value="search"
         size="small"
-        placeholder="搜索日志内容"
+        :placeholder="t('logs.searchLog')"
         clearable
         style="width: 220px"
       />
-      <div class="log-count">{{ filtered.length }} 条</div>
+      <div class="log-count">{{ t("logs.count", { n: filtered.length }) }}</div>
     </div>
     <div ref="scroller" class="log-body" :style="{ height: height + 'px' }">
-      <div v-if="!filtered.length" class="log-empty">暂无日志</div>
+      <div v-if="!filtered.length" class="log-empty">{{ t("logs.empty") }}</div>
       <div v-for="(line, idx) in filtered" :key="idx" class="log-line">
         <span class="log-time">{{ formatTime(line.createdAt) }}</span>
         <span class="log-level" :class="levelClass(line.level)">

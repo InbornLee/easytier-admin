@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import type { DataTableColumns } from "naive-ui";
 import { NButton, NIcon, NTag } from "naive-ui";
 import {
@@ -49,6 +50,7 @@ import type {
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const networkId = computed(() => route.params.id as string);
 
 const network = ref<Network | null>(null);
@@ -143,7 +145,7 @@ async function doAction(action: "start" | "stop" | "restart") {
   actionLoading.value = action;
   try {
     await networkApi[action](networkId.value);
-    message.success("操作成功");
+    message.success(t("common.operated"));
     await loadAll();
   } catch (err) {
     message.error(extractError(err));
@@ -177,14 +179,14 @@ async function onNodeSaved(payload: { node: NodeItem; credentialSecret?: string 
 
 function removeNode(node: NodeItem) {
   dialog.error({
-    title: "删除节点",
-    content: `确定删除节点「${node.name}」吗？其凭据也会被撤销。`,
-    positiveText: "删除",
-    negativeText: "取消",
+    title: t("nodes.deleteTitle"),
+    content: t("networkDetail.deleteNodeConfirm", { name: node.name }),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await nodeApi.remove(node.id);
-        message.success("已删除");
+        message.success(t("nodes.deleted"));
         await loadTab("nodes");
       } catch (err) {
         message.error(extractError(err));
@@ -196,14 +198,14 @@ function removeNode(node: NodeItem) {
 function removeNetwork() {
   if (!network.value) return;
   dialog.error({
-    title: "删除网络",
-    content: `确定删除网络「${network.value.name}」吗？该网络下的节点与凭据将一并删除，且不可恢复。`,
-    positiveText: "删除",
-    negativeText: "取消",
+    title: t("action.networkDelete"),
+    content: t("networks.deleteConfirm", { name: network.value.name }),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await networkApi.remove(networkId.value);
-        message.success("网络已删除");
+        message.success(t("networkDetail.networkDeleted"));
         router.push({ name: "networks" });
       } catch (err) {
         message.error(extractError(err));
@@ -218,7 +220,7 @@ function rotateCredential(node: NodeItem) {
 }
 
 async function onNodeRotated(payload: { node: NodeItem }) {
-  message.success("凭据已更换，请查看新的接入信息");
+  message.success(t("nodes.rotated"));
   joinNodeId.value = payload.node.id;
   showJoinModal.value = true;
   await loadTab("nodes");
@@ -230,14 +232,14 @@ async function onCredentialCreated() {
 
 async function revokeCredential(cred: Credential) {
   dialog.warning({
-    title: "撤销凭据",
-    content: "撤销后使用该凭据的节点将被移除，且不可恢复。确定继续？",
-    positiveText: "撤销",
-    negativeText: "取消",
+    title: t("credentials.revokeTitle"),
+    content: t("networkDetail.revokeCredConfirm"),
+    positiveText: t("credentials.revoke"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await credentialApi.revoke(cred.id);
-        message.success("已撤销");
+        message.success(t("credentials.revoked"));
         await loadTab("credentials");
       } catch (err) {
         message.error(extractError(err));
@@ -248,14 +250,14 @@ async function revokeCredential(cred: Credential) {
 
 async function deleteCredential(cred: Credential) {
   dialog.error({
-    title: "删除凭据",
-    content: "删除后将同时撤销该凭据并移除记录，使用该凭据的节点将被移除。确定删除？",
-    positiveText: "删除",
-    negativeText: "取消",
+    title: t("credentials.deleteTitle"),
+    content: t("credentials.deleteConfirm"),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await credentialApi.remove(cred.id);
-        message.success("已删除");
+        message.success(t("credentials.deleted"));
         await loadTab("credentials");
       } catch (err) {
         message.error(extractError(err));
@@ -266,27 +268,27 @@ async function deleteCredential(cred: Credential) {
 
 const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
   {
-    title: "节点",
+    title: t("nodes.colNode"),
     key: "name",
     render: (row) =>
       h("div", {}, [
         h("div", { class: "cell-name" }, [
           row.name,
           !row.credentialId
-            ? h("span", { class: "no-cred" }, "无凭据")
+            ? h("span", { class: "no-cred" }, t("nodes.noCredential"))
             : null,
         ]),
         h("div", { class: "cell-sub mono" }, `${row.hostname} · ${row.ipv4 || "DHCP"}`),
       ]),
   },
   {
-    title: "状态",
+    title: t("common.status"),
     key: "status",
     width: 100,
     render: (row) => h(StatusTag, { kind: "node", status: row.status }),
   },
   {
-    title: "链路",
+    title: t("nodes.colLink"),
     key: "cost",
     width: 110,
     render: (row) => {
@@ -300,14 +302,14 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
     },
   },
   {
-    title: "延迟",
+    title: t("nodes.colLatency"),
     key: "lat",
     width: 90,
     render: (row) =>
       row.live?.online && row.live.latMs != null ? `${row.live.latMs} ms` : "-",
   },
   {
-    title: "流量 (收/发)",
+    title: t("networkDetail.colTraffic"),
     key: "traffic",
     width: 160,
     render: (row) =>
@@ -316,7 +318,7 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
         : "-",
   },
   {
-    title: "隧道 / NAT",
+    title: t("nodes.colTunnel"),
     key: "tunnel",
     width: 130,
     render: (row) =>
@@ -325,13 +327,13 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
         : "-",
   },
   {
-    title: "最后在线",
+    title: t("nodes.colLastSeen"),
     key: "lastSeenAt",
     width: 165,
     render: (row) => (row.lastSeenAt ? formatTime(row.lastSeenAt) : "-"),
   },
   {
-    title: "操作",
+    title: t("common.actions"),
     key: "actions",
     width: 280,
     fixed: "right",
@@ -345,7 +347,7 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
             type: "primary",
             onClick: () => openJoin(row),
           },
-          { icon: () => h(NIcon, { component: LinkOutline }), default: () => "接入" },
+          { icon: () => h(NIcon, { component: LinkOutline }), default: () => t("nodes.actionJoin") },
         ),
       ];
       if (canManage.value) {
@@ -357,7 +359,7 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
               quaternary: true,
               onClick: () => openEditNode(row),
             },
-            { icon: () => h(NIcon, { component: CreateOutline }), default: () => "编辑" },
+            { icon: () => h(NIcon, { component: CreateOutline }), default: () => t("common.edit") },
           ),
         );
         actions.push(
@@ -368,7 +370,7 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
               quaternary: true,
               onClick: () => rotateCredential(row),
             },
-            { icon: () => h(NIcon, { component: ShieldOutline }), default: () => "换凭据" },
+            { icon: () => h(NIcon, { component: ShieldOutline }), default: () => t("nodes.actionRotate") },
           ),
         );
         actions.push(
@@ -380,7 +382,7 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
               type: "error",
               onClick: () => removeNode(row),
             },
-            { icon: () => h(NIcon, { component: TrashOutline }), default: () => "删除" },
+            { icon: () => h(NIcon, { component: TrashOutline }), default: () => t("common.delete") },
           ),
         );
       }
@@ -391,42 +393,46 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
 
 const credentialColumns = computed<DataTableColumns<Credential>>(() => [
   {
-    title: "凭据 ID",
+    title: t("credentials.credentialId"),
     key: "credentialId",
     render: (row) => h("span", { class: "mono" }, row.credentialId),
   },
   {
-    title: "状态",
+    title: t("common.status"),
     key: "status",
     width: 100,
     render: (row) => h(StatusTag, { kind: "credential", status: row.status }),
   },
   {
-    title: "剩余有效期",
+    title: t("credentials.remaining"),
     key: "remaining",
     width: 140,
     render: (row) =>
       row.status === "active" ? formatDuration(row.remainingSeconds) : credentialStatusLabel(row.status),
   },
   {
-    title: "到期时间",
+    title: t("credentials.expiresAt"),
     key: "expiresAt",
     width: 170,
     render: (row) => formatTime(row.expiresAt),
   },
   {
-    title: "权限",
+    title: t("credentials.perms"),
     key: "perms",
     width: 160,
     render: (row) =>
       h("span", {}, [
-        row.allowRelay ? "中继 " : "",
-        row.reusable ? "复用 " : "独占 ",
-        row.groups.length ? `分组:${row.groups.join(",")}` : "",
+        row.allowRelay ? `${t("networkDetail.permRelay")} ` : "",
+        row.reusable
+          ? `${t("networkDetail.permReusable")} `
+          : `${t("credentials.exclusive")} `,
+        row.groups.length
+          ? t("credentials.groupsPrefix", { list: row.groups.join(",") })
+          : "",
       ]),
   },
   {
-    title: "操作",
+    title: t("common.actions"),
     key: "actions",
     width: 160,
     fixed: "right",
@@ -443,7 +449,7 @@ const credentialColumns = computed<DataTableColumns<Credential>>(() => [
               type: "warning",
               onClick: () => revokeCredential(row),
             },
-            { default: () => "撤销" },
+            { default: () => t("credentials.revoke") },
           ),
         );
       }
@@ -456,7 +462,7 @@ const credentialColumns = computed<DataTableColumns<Credential>>(() => [
             type: "error",
             onClick: () => deleteCredential(row),
           },
-          { default: () => "删除" },
+          { default: () => t("common.delete") },
         ),
       );
       return h("div", { class: "row-actions" }, actions);
@@ -464,23 +470,28 @@ const credentialColumns = computed<DataTableColumns<Credential>>(() => [
   },
 ]);
 
-const routeColumns: DataTableColumns<RouteListItem> = [
-  { title: "虚拟 IP", key: "ipv4", width: 150 },
-  { title: "主机名", key: "hostname" },
-  { title: "代理网段", key: "proxy_cidrs" },
-  { title: "下一跳", key: "next_hop_ipv4", width: 150 },
-  { title: "跳数", key: "path_len", width: 80 },
-  { title: "路径延迟", key: "path_latency", width: 100, render: (r) => `${r.path_latency} ms` },
-  { title: "版本", key: "version", width: 100 },
-];
+const routeColumns = computed<DataTableColumns<RouteListItem>>(() => [
+  { title: t("networkDetail.colVirtualIp"), key: "ipv4", width: 150 },
+  { title: t("networkDetail.colHostname"), key: "hostname" },
+  { title: t("networkDetail.colProxyCidrs"), key: "proxy_cidrs" },
+  { title: t("networkDetail.colNextHop"), key: "next_hop_ipv4", width: 150 },
+  { title: t("networkDetail.colHops"), key: "path_len", width: 80 },
+  {
+    title: t("networkDetail.colPathLatency"),
+    key: "path_latency",
+    width: 100,
+    render: (r) => `${r.path_latency} ms`,
+  },
+  { title: t("networkDetail.colVersion"), key: "version", width: 100 },
+]);
 
 const tabPanes = computed<Array<{ name: string; tab: string }>>(() => [
-  { name: "nodes", tab: `节点 (${nodes.value.length})` },
-  { name: "overview", tab: "概览" },
-  { name: "topology", tab: "连接拓扑" },
-  { name: "credentials", tab: `凭据 (${credentials.value.length})` },
-  { name: "routes", tab: "路由表" },
-  { name: "logs", tab: "运行日志" },
+  { name: "nodes", tab: t("networkDetail.tabNodes", { n: nodes.value.length }) },
+  { name: "overview", tab: t("networkDetail.tabOverview") },
+  { name: "topology", tab: t("networkDetail.tabTopology") },
+  { name: "credentials", tab: t("networkDetail.tabCredentials", { n: credentials.value.length }) },
+  { name: "routes", tab: t("networkDetail.tabRoutes") },
+  { name: "logs", tab: t("networkDetail.tabLogs") },
 ]);
 
 const livePeerCount = computed(() =>
@@ -510,7 +521,7 @@ onUnmounted(() => {
         </n-button>
         <div>
           <h1 class="page-title">
-            {{ network?.name ?? "网络详情" }}
+            {{ network?.name ?? t("networkDetail.title") }}
             <StatusTag
               v-if="network"
               :kind="'network'"
@@ -527,15 +538,15 @@ onUnmounted(() => {
       <div class="header-actions">
         <n-button v-if="canManage" size="small" @click="showEditModal = true">
           <template #icon><n-icon :component="CreateOutline" /></template>
-          编辑
+          {{ t("common.edit") }}
         </n-button>
         <n-button v-if="canManage" size="small" @click="showShareModal = true">
           <template #icon><n-icon :component="ShareSocialOutline" /></template>
-          分享
+          {{ t("networks.share") }}
         </n-button>
         <n-button size="small" @click="loadAll">
           <template #icon><n-icon :component="RefreshOutline" /></template>
-          刷新
+          {{ t("common.refresh") }}
         </n-button>
         <n-button
           v-if="canManage && network?.status !== 'running'"
@@ -545,7 +556,7 @@ onUnmounted(() => {
           @click="doAction('start')"
         >
           <template #icon><n-icon :component="PlayOutline" /></template>
-          启动
+          {{ t("networkDetail.start") }}
         </n-button>
         <template v-else-if="canManage">
           <n-button
@@ -555,7 +566,7 @@ onUnmounted(() => {
             @click="doAction('stop')"
           >
             <template #icon><n-icon :component="StopOutline" /></template>
-            停止
+            {{ t("networkDetail.stop") }}
           </n-button>
           <n-button
             size="small"
@@ -563,12 +574,12 @@ onUnmounted(() => {
             @click="doAction('restart')"
           >
             <template #icon><n-icon :component="RefreshOutline" /></template>
-            重启
+            {{ t("networkDetail.restart") }}
           </n-button>
         </template>
         <n-button v-if="canManage" size="small" type="error" ghost @click="removeNetwork">
           <template #icon><n-icon :component="TrashOutline" /></template>
-          删除网络
+          {{ t("action.networkDelete") }}
         </n-button>
       </div>
     </div>
@@ -586,46 +597,46 @@ onUnmounted(() => {
             <template v-if="pane.name === 'overview'">
               <n-grid :cols="24" :x-gap="16" :y-gap="16">
                 <n-gi :span="12">
-                  <n-descriptions title="网络信息" :column="1" size="small" bordered>
-                    <n-descriptions-item label="EasyTier 网络标识">
+                  <n-descriptions :title="t('networkDetail.infoTitle')" :column="1" size="small" bordered>
+                    <n-descriptions-item :label="t('networkDetail.easyTierNetworkId')">
                       {{ network?.networkName }}
                     </n-descriptions-item>
-                    <n-descriptions-item label="虚拟网段">{{ network?.ipv4 }}</n-descriptions-item>
-                    <n-descriptions-item label="共享节点主机名">
+                    <n-descriptions-item :label="t('networkDetail.virtualSubnet')">{{ network?.ipv4 }}</n-descriptions-item>
+                    <n-descriptions-item :label="t('networkDetail.sharedNodeHostname')">
                       {{ network?.hostname }}
                     </n-descriptions-item>
-                    <n-descriptions-item label="监听端口">
+                    <n-descriptions-item :label="t('networks.colListenPort')">
                       {{ network?.listenPort }} (RPC {{ network?.rpcPort }})
                     </n-descriptions-item>
-                    <n-descriptions-item label="安全模式">
-                      {{ network?.secureMode ? "已开启（Noise 握手）" : "关闭" }}
+                    <n-descriptions-item :label="t('networks.colSecureMode')">
+                      {{ network?.secureMode ? t("networkDetail.secureEnabled") : t("common.disabled") }}
                     </n-descriptions-item>
-                    <n-descriptions-item label="公共共享节点">
+                    <n-descriptions-item :label="t('networkDetail.publicSharedNode')">
                       <span class="mono">{{ network?.externalNode || "-" }}</span>
                     </n-descriptions-item>
-                    <n-descriptions-item label="自动启动">
-                      {{ network?.autoStart ? "是" : "否" }}
+                    <n-descriptions-item :label="t('networks.colAutoStart')">
+                      {{ network?.autoStart ? t("common.yes") : t("common.no") }}
                     </n-descriptions-item>
                   </n-descriptions>
                 </n-gi>
                 <n-gi :span="12">
-                  <n-descriptions title="实时状态" :column="1" size="small" bordered>
-                    <n-descriptions-item label="RPC 连通">
+                  <n-descriptions :title="t('networkDetail.liveStatus')" :column="1" size="small" bordered>
+                    <n-descriptions-item :label="t('networkDetail.rpcConnectivity')">
                       <n-tag :type="live?.online ? 'success' : 'error'" size="small" :bordered="false">
-                        {{ live?.online ? "已连接" : "不可用" }}
+                        {{ live?.online ? t("networkDetail.connected") : t("networkDetail.unavailable") }}
                       </n-tag>
                     </n-descriptions-item>
-                    <n-descriptions-item label="在线节点数">{{ livePeerCount }}</n-descriptions-item>
-                    <n-descriptions-item label="本节点虚拟 IP">
+                    <n-descriptions-item :label="t('networkDetail.onlineNodeCount')">{{ livePeerCount }}</n-descriptions-item>
+                    <n-descriptions-item :label="t('networkDetail.localVirtualIp')">
                       {{ (live?.nodeInfo as any)?.ipv4_addr ?? network?.ipv4 }}
                     </n-descriptions-item>
-                    <n-descriptions-item label="本节点 Peer ID">
+                    <n-descriptions-item :label="t('networkDetail.localPeerId')">
                       {{ (live?.nodeInfo as any)?.peer_id ?? "-" }}
                     </n-descriptions-item>
-                    <n-descriptions-item label="共享节点公钥">
+                    <n-descriptions-item :label="t('networkDetail.sharedNodePublicKey')">
                       <CopyText :text="network?.sharedNodePublicKey ?? ''" masked />
                     </n-descriptions-item>
-                    <n-descriptions-item label="日志级别">
+                    <n-descriptions-item :label="t('networkDetail.logLevel')">
                       <n-tag size="small" :bordered="false">info</n-tag>
                     </n-descriptions-item>
                   </n-descriptions>
@@ -640,7 +651,7 @@ onUnmounted(() => {
                 </n-gi>
                 <n-gi :span="24">
                   <n-collapse>
-                    <n-collapse-item title="生成的配置文件 (config.toml)" name="config">
+                    <n-collapse-item :title="t('networkDetail.generatedConfig')" name="config">
                       <template #header-extra>
                         <CopyText :text="configText" />
                       </template>
@@ -656,15 +667,15 @@ onUnmounted(() => {
               <div class="node-summary" :class="{ online: nodeSummary.online > 0 }">
                 <div class="ns-item">
                   <span class="ns-value">{{ nodeSummary.total }}</span>
-                  <span class="ns-label">网络内节点</span>
+                  <span class="ns-label">{{ t("networkDetail.networkNodes") }}</span>
                 </div>
                 <div class="ns-item">
                   <span class="ns-value online">{{ nodeSummary.online }}</span>
-                  <span class="ns-label">在线</span>
+                  <span class="ns-label">{{ t("status.node.online") }}</span>
                 </div>
                 <div class="ns-item">
                   <span class="ns-value offline">{{ nodeSummary.offline }}</span>
-                  <span class="ns-label">离线 / 未接入</span>
+                  <span class="ns-label">{{ t("networkDetail.offlineOrNotJoined") }}</span>
                 </div>
                 <div class="ns-item">
                   <n-tag
@@ -673,19 +684,19 @@ onUnmounted(() => {
                     round
                     :bordered="false"
                   >
-                    {{ live?.online ? "共享节点在线" : "共享节点离线" }}
+                    {{ live?.online ? t("networkDetail.sharedNodeOnline") : t("networkDetail.sharedNodeOffline") }}
                   </n-tag>
                 </div>
-                <span class="ns-hint">每 15 秒自动刷新</span>
+                <span class="ns-hint">{{ t("networkDetail.autoRefreshHint", { n: 15 }) }}</span>
               </div>
               <div class="tab-toolbar">
                 <n-button v-if="canManage" size="small" type="primary" @click="openCreateNode">
                   <template #icon><n-icon :component="AddOutline" /></template>
-                  新建节点
+                  {{ t("nodes.createTitle") }}
                 </n-button>
                 <n-button size="small" @click="loadTab('nodes')">
                   <template #icon><n-icon :component="RefreshOutline" /></template>
-                  刷新
+                  {{ t("common.refresh") }}
                 </n-button>
               </div>
               <n-data-table
@@ -702,10 +713,10 @@ onUnmounted(() => {
               <div class="tab-toolbar">
                 <n-button size="small" @click="loadTab('topology')">
                   <template #icon><n-icon :component="RefreshOutline" /></template>
-                  刷新拓扑
+                  {{ t("networkDetail.refreshTopology") }}
                 </n-button>
                 <span v-if="topology" class="tab-hint">
-                  更新于 {{ formatTime(topology.updatedAt) }}
+                  {{ t("networkDetail.updatedAt", { time: formatTime(topology.updatedAt) }) }}
                 </span>
               </div>
               <TopologyGraph :topology="topology" />
@@ -716,11 +727,11 @@ onUnmounted(() => {
               <div class="tab-toolbar">
                 <n-button v-if="canManage" size="small" type="primary" @click="showCredModal = true">
                   <template #icon><n-icon :component="KeyOutline" /></template>
-                  签发临时凭据
+                  {{ t("credentials.issue") }}
                 </n-button>
                 <n-button size="small" @click="loadTab('credentials')">
                   <template #icon><n-icon :component="RefreshOutline" /></template>
-                  刷新
+                  {{ t("common.refresh") }}
                 </n-button>
               </div>
               <n-data-table
@@ -746,9 +757,9 @@ onUnmounted(() => {
             <template v-else-if="pane.name === 'logs'">
               <div class="tab-toolbar">
                 <n-tag :type="connected ? 'success' : 'default'" size="small" :bordered="false">
-                  {{ connected ? "实时日志已连接" : "实时日志未连接" }}
+                  {{ connected ? t("networkDetail.liveLogConnected") : t("networkDetail.liveLogDisconnected") }}
                 </n-tag>
-                <span class="tab-hint">日志同时写入 data/logs/&lt;网络ID&gt;/</span>
+                <span class="tab-hint">{{ t("networkDetail.logWriteHint") }}</span>
               </div>
               <LogViewer :lines="allLogs" :height="520" />
             </template>

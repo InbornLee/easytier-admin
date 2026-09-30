@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import type { FormInst, FormRules } from "naive-ui";
 import { networkApi, type NetworkPayload } from "@/api";
 import { extractError } from "@/api/client";
@@ -21,6 +22,7 @@ const visible = computed({
   set: (v) => emit("update:show", v),
 });
 
+const { t } = useI18n();
 const formRef = ref<FormInst | null>(null);
 const submitting = ref(false);
 const advanced = ref(false);
@@ -89,19 +91,21 @@ const model = reactive<FormModel>({
   flags: { ...DEFAULT_FLAGS },
 });
 
-const rules: FormRules = {
-  name: [{ required: true, message: "请输入网络名称", trigger: ["blur", "input"] }],
+const rules = computed<FormRules>(() => ({
+  name: [
+    { required: true, message: t("networkForm.form.ruleNameRequired"), trigger: ["blur", "input"] },
+  ],
   ipv4: [
     {
       validator: (_r, value: string) => {
         if (model.dhcp) return true;
         return /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(value || "");
       },
-      message: "格式应为 CIDR，例如 10.126.126.1/24",
+      message: t("networkForm.form.ruleIpv4Format"),
       trigger: ["blur"],
     },
   ],
-};
+}));
 
 const isEdit = computed(() => !!props.network);
 const portsDisabled = computed(
@@ -277,7 +281,7 @@ async function submit() {
         payload.rpcPort = model.rpcPort;
       }
       saved = await networkApi.update(props.network.id, payload);
-      message.success("网络配置已更新");
+      message.success(t("networkForm.form.updated"));
     } else {
       if (!model.generateSecret && model.networkSecret)
         payload.networkSecret = model.networkSecret;
@@ -288,7 +292,7 @@ async function submit() {
         payload.rpcPort = model.rpcPort;
       }
       saved = await networkApi.create(payload);
-      message.success("网络创建成功");
+      message.success(t("networkForm.form.created"));
     }
     emit("saved", saved);
     visible.value = false;
@@ -304,60 +308,60 @@ async function submit() {
   <n-modal
     v-model:show="visible"
     preset="card"
-    :title="isEdit ? `编辑网络 · ${props.network?.name ?? ''}` : '新建网络'"
+    :title="isEdit ? t('networkForm.form.editTitle', { name: props.network?.name ?? '' }) : t('networkForm.form.createTitle')"
     style="width: 720px; max-width: 95vw"
     :mask-closable="false"
   >
     <n-form ref="formRef" :model="model" :rules="rules" label-placement="top">
-      <n-divider title-placement="left" style="margin-top: 0">基础信息</n-divider>
+      <n-divider title-placement="left" style="margin-top: 0">{{ t("networkForm.form.sectionBasic") }}</n-divider>
       <n-grid :cols="2" :x-gap="14">
-        <n-form-item-gi label="网络名称" path="name">
-          <n-input v-model:value="model.name" placeholder="例如：办公网" />
+        <n-form-item-gi :label="t('networkForm.form.name')" path="name">
+          <n-input v-model:value="model.name" :placeholder="t('networkForm.form.namePlaceholder')" />
         </n-form-item-gi>
-        <n-form-item-gi label="EasyTier 网络标识 (network-name)">
+        <n-form-item-gi :label="t('networkForm.form.networkId')">
           <n-input
             v-model:value="model.networkName"
-            placeholder="留空则与网络名称相同，建议英文"
+            :placeholder="t('networkForm.form.networkIdPlaceholder')"
           />
         </n-form-item-gi>
       </n-grid>
-      <n-form-item label="描述">
+      <n-form-item :label="t('networkForm.form.description')">
         <n-input
           v-model:value="model.description"
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 3 }"
-          placeholder="可选"
+          :placeholder="t('common.optional')"
         />
       </n-form-item>
 
-      <n-divider title-placement="left">网络与地址</n-divider>
+      <n-divider title-placement="left">{{ t("networkForm.form.sectionAddress") }}</n-divider>
       <n-grid :cols="2" :x-gap="14">
-        <n-form-item-gi label="虚拟网段 (ipv4)" path="ipv4">
+        <n-form-item-gi :label="t('networkForm.form.ipv4')" path="ipv4">
           <n-input
             v-model:value="model.ipv4"
             :disabled="model.dhcp"
             placeholder="10.126.126.1/24"
           />
         </n-form-item-gi>
-        <n-form-item-gi label="DHCP 自动分配共享节点 IP">
+        <n-form-item-gi :label="t('networkForm.form.dhcp')">
           <n-switch v-model:value="model.dhcp" />
         </n-form-item-gi>
-        <n-form-item-gi label="共享节点主机名 (hostname)">
-          <n-input v-model:value="model.hostname" placeholder="留空自动生成" />
+        <n-form-item-gi :label="t('networkForm.form.hostname')">
+          <n-input v-model:value="model.hostname" :placeholder="t('networkForm.form.autoGeneratePlaceholder')" />
         </n-form-item-gi>
-        <n-form-item-gi label="实例名 (instance-name)">
-          <n-input v-model:value="model.instanceName" placeholder="留空自动生成" />
+        <n-form-item-gi :label="t('networkForm.form.instanceName')">
+          <n-input v-model:value="model.instanceName" :placeholder="t('networkForm.form.autoGeneratePlaceholder')" />
         </n-form-item-gi>
       </n-grid>
 
-      <n-divider title-placement="left">连接配置</n-divider>
-      <n-form-item label="公共共享节点 / 初始 Peer (external node)">
+      <n-divider title-placement="left">{{ t("networkForm.form.sectionConnection") }}</n-divider>
+      <n-form-item :label="t('networkForm.form.externalNode')">
         <n-input
           v-model:value="model.externalNode"
-          placeholder="可选，留空表示不设置初始 Peer；例如 tcp://<公共共享节点>:11010"
+          :placeholder="t('networkForm.form.externalNodePlaceholder')"
         />
       </n-form-item>
-      <n-form-item label="监听器 (listeners)">
+      <n-form-item :label="t('networkForm.form.listeners')">
         <div class="stack">
           <n-dynamic-tags
             v-model:value="model.listeners"
@@ -369,34 +373,34 @@ async function submit() {
             :disabled="!isEdit && model.autoPorts"
             @click="fillDefaultListeners"
           >
-            按端口生成默认监听 (tcp/udp + ws)
+            {{ t("networkForm.form.generateDefaultListeners") }}
           </n-button>
           <span v-if="!isEdit && model.autoPorts" class="hint">
-            自动分配端口时，将由后端根据实际分配的端口生成默认监听器（tcp/udp + ws）。
+            {{ t("networkForm.form.autoListenersHint") }}
           </span>
           <span v-else class="hint">
-            监听器会随「监听端口」自动同步（tcp/udp:端口 + ws:端口+1）；手动编辑后将不再自动覆盖。
+            {{ t("networkForm.form.listenersHint") }}
           </span>
         </div>
       </n-form-item>
       <n-grid :cols="2" :x-gap="14">
-        <n-form-item-gi label="映射监听器 (mapped listeners)">
+        <n-form-item-gi :label="t('networkForm.form.mappedListeners')">
           <n-dynamic-tags v-model:value="model.mappedListeners" size="small" />
         </n-form-item-gi>
-        <n-form-item-gi label="初始 Peer 列表">
+        <n-form-item-gi :label="t('networkForm.form.peers')">
           <n-dynamic-tags v-model:value="model.peers" size="small" />
         </n-form-item-gi>
       </n-grid>
 
-      <n-divider title-placement="left">端口与安全</n-divider>
+      <n-divider title-placement="left">{{ t("networkForm.form.sectionPortSecurity") }}</n-divider>
       <n-grid :cols="3" :x-gap="14">
-        <n-form-item-gi v-if="!isEdit" label="端口分配">
+        <n-form-item-gi v-if="!isEdit" :label="t('networkForm.form.portAllocation')">
           <n-switch v-model:value="model.autoPorts">
-            <template #checked>自动分配</template>
-            <template #unchecked>手动指定</template>
+            <template #checked>{{ t("networkForm.form.autoAllocate") }}</template>
+            <template #unchecked>{{ t("networkForm.form.manualAllocate") }}</template>
           </n-switch>
         </n-form-item-gi>
-        <n-form-item-gi label="监听端口">
+        <n-form-item-gi :label="t('networkForm.form.listenPort')">
           <n-input-number
             v-model:value="model.listenPort"
             :min="1"
@@ -405,7 +409,7 @@ async function submit() {
             style="width: 100%"
           />
         </n-form-item-gi>
-        <n-form-item-gi label="RPC 端口">
+        <n-form-item-gi :label="t('networkForm.form.rpcPort')">
           <n-input-number
             v-model:value="model.rpcPort"
             :min="1"
@@ -414,51 +418,51 @@ async function submit() {
             style="width: 100%"
           />
         </n-form-item-gi>
-        <n-form-item-gi label="安全模式">
+        <n-form-item-gi :label="t('networkForm.form.secureMode')">
           <n-switch v-model:value="model.secureMode" />
         </n-form-item-gi>
-        <n-form-item-gi label="自动启动">
+        <n-form-item-gi :label="t('networkForm.form.autoStart')">
           <n-switch v-model:value="model.autoStart" />
         </n-form-item-gi>
       </n-grid>
       <n-alert v-if="!isEdit && model.autoPorts" type="info" :show-icon="true" class="mb">
-        将由后端自动分配可用端口（从 <span class="mono">EASYTIER_LISTEN_PORT_START</span> /
-        <span class="mono">EASYTIER_RPC_PORT_START</span> 起）。请确保这些端口已在 docker-compose 中映射。
+        {{ t("networkForm.form.autoPortsAlertPrefix") }}<span class="mono">EASYTIER_LISTEN_PORT_START</span> /
+        <span class="mono">EASYTIER_RPC_PORT_START</span>{{ t("networkForm.form.autoPortsAlertSuffix") }}
       </n-alert>
       <n-alert v-if="portsDisabled" type="info" :show-icon="true" class="mb">
-        网络运行中无法修改端口，请先停止网络。
+        {{ t("networkForm.form.portsDisabledAlert") }}
       </n-alert>
-      <n-form-item label="网络密钥 (network-secret)">
+      <n-form-item :label="t('networkForm.form.networkSecret')">
         <n-input-group v-if="!isEdit">
           <n-input
             v-model:value="model.networkSecret"
             :disabled="model.generateSecret"
-            placeholder="留空自动生成高强度密钥"
+            :placeholder="t('networkForm.form.secretPlaceholder')"
             show-password-on="click"
             type="password"
           />
           <n-checkbox v-model:checked="model.generateSecret" class="secret-check">
-            自动生成
+            {{ t("networkForm.form.autoGenerate") }}
           </n-checkbox>
         </n-input-group>
         <n-input
           v-else
           v-model:value="model.networkSecret"
-          placeholder="留空表示不修改现有密钥"
+          :placeholder="t('networkForm.form.secretEditPlaceholder')"
           show-password-on="click"
           type="password"
         />
       </n-form-item>
 
       <n-divider title-placement="left">
-        高级参数
+        {{ t("networkForm.form.sectionAdvanced") }}
         <n-button quaternary size="tiny" @click="advanced = !advanced">
-          {{ advanced ? "收起" : "展开" }}
+          {{ advanced ? t("networkForm.form.collapse") : t("networkForm.form.expand") }}
         </n-button>
       </n-divider>
       <template v-if="advanced">
         <n-grid :cols="3" :x-gap="14">
-          <n-form-item-gi label="默认协议">
+          <n-form-item-gi :label="t('networkForm.form.defaultProtocol')">
             <n-select
               v-model:value="model.flags.default_protocol"
               :options="[
@@ -474,40 +478,40 @@ async function submit() {
           <n-form-item-gi label="MTU">
             <n-input-number v-model:value="model.flags.mtu" :min="576" :max="9000" style="width: 100%" />
           </n-form-item-gi>
-          <n-form-item-gi label="转发网络白名单">
+          <n-form-item-gi :label="t('networkForm.form.relayWhitelist')">
             <n-input v-model:value="model.flags.relay_network_whitelist" />
           </n-form-item-gi>
         </n-grid>
         <n-grid :cols="3" :x-gap="14">
-          <n-form-item-gi label="加密通信">
+          <n-form-item-gi :label="t('networkForm.form.enableEncryption')">
             <n-switch v-model:value="model.flags.enable_encryption" />
           </n-form-item-gi>
-          <n-form-item-gi label="启用 IPv6">
+          <n-form-item-gi :label="t('networkForm.form.enableIpv6')">
             <n-switch v-model:value="model.flags.enable_ipv6" />
           </n-form-item-gi>
-          <n-form-item-gi label="延迟优先">
+          <n-form-item-gi :label="t('networkForm.form.latencyFirst')">
             <n-switch v-model:value="model.flags.latency_first" />
           </n-form-item-gi>
-          <n-form-item-gi label="允许作为出口节点">
+          <n-form-item-gi :label="t('networkForm.form.exitNode')">
             <n-switch v-model:value="model.flags.enable_exit_node" />
           </n-form-item-gi>
-          <n-form-item-gi label="不创建 TUN 设备 (no-tun)">
+          <n-form-item-gi :label="t('networkForm.form.noTun')">
             <n-switch v-model:value="model.flags.no_tun" />
           </n-form-item-gi>
-          <n-form-item-gi label="私有模式 (private-mode)">
+          <n-form-item-gi :label="t('networkForm.form.privateMode')">
             <n-switch v-model:value="model.flags.private_mode" />
           </n-form-item-gi>
-          <n-form-item-gi label="禁用 P2P">
+          <n-form-item-gi :label="t('networkForm.form.disableP2p')">
             <n-switch v-model:value="model.flags.disable_p2p" />
           </n-form-item-gi>
-          <n-form-item-gi label="禁用 UDP 打洞">
+          <n-form-item-gi :label="t('networkForm.form.disableUdpHolePunching')">
             <n-switch v-model:value="model.flags.disable_udp_hole_punching" />
           </n-form-item-gi>
-          <n-form-item-gi label="禁用 TCP 打洞">
+          <n-form-item-gi :label="t('networkForm.form.disableTcpHolePunching')">
             <n-switch v-model:value="model.flags.disable_tcp_hole_punching" />
           </n-form-item-gi>
         </n-grid>
-        <n-form-item v-if="!isEdit" label="创建后立即启动">
+        <n-form-item v-if="!isEdit" :label="t('networkForm.form.startNow')">
           <n-switch v-model:value="model.startNow" />
         </n-form-item>
       </template>
@@ -515,9 +519,9 @@ async function submit() {
 
     <template #footer>
       <div class="modal-footer">
-        <n-button @click="visible = false">取消</n-button>
+        <n-button @click="visible = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" :loading="submitting" @click="submit">
-          {{ isEdit ? "保存修改" : "创建网络" }}
+          {{ isEdit ? t("common.saveChanges") : t("networkForm.form.createNetwork") }}
         </n-button>
       </div>
     </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import VChart from "vue-echarts";
 import { isDark } from "@/utils/theme";
 import { formatBytes } from "@/utils/format";
@@ -10,6 +11,8 @@ const props = defineProps<{
   title?: string;
   height?: number;
 }>();
+
+const { t } = useI18n();
 
 const option = computed(() => {
   const dark = isDark.value;
@@ -22,7 +25,7 @@ const option = computed(() => {
       valueFormatter: (v: number) => formatBytes(v),
     },
     legend: {
-      data: ["接收", "发送"],
+      data: [t("components.traffic.receive"), t("components.traffic.send")],
       textStyle: { color: textColor },
       right: 10,
       top: 0,
@@ -45,7 +48,7 @@ const option = computed(() => {
     },
     series: [
       {
-        name: "接收",
+        name: t("components.traffic.receive"),
         type: "line",
         smooth: true,
         showSymbol: false,
@@ -55,7 +58,7 @@ const option = computed(() => {
         data: series.map((p) => [p.t, p.rx]),
       },
       {
-        name: "发送",
+        name: t("components.traffic.send"),
         type: "line",
         smooth: true,
         showSymbol: false,
@@ -80,7 +83,7 @@ const option = computed(() => {
       autoresize
     />
     <div v-else class="empty-block">
-      <n-empty description="暂无流量数据（每 30 秒采样一次）" />
+      <n-empty :description="t('components.traffic.noData')" />
     </div>
   </div>
 </template>

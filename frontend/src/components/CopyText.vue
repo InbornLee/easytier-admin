@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { CopyOutline, CheckmarkOutline } from "@vicons/ionicons5";
 import { message } from "@/utils/feedback";
 import { copyToClipboard } from "@/utils/clipboard";
@@ -11,6 +12,7 @@ const props = defineProps<{
 }>();
 
 const copied = ref(false);
+const { t } = useI18n();
 
 const display = computed(() => {
   if (!props.masked) return props.text;
@@ -23,10 +25,10 @@ async function copy() {
   const ok = await copyToClipboard(props.text);
   if (ok) {
     copied.value = true;
-    message.success("已复制到剪贴板");
+    message.success(t("common.copied"));
     setTimeout(() => (copied.value = false), 1500);
   } else {
-    message.error("复制失败，请手动选择文本复制");
+    message.error(t("common.copyFailed"));
   }
 }
 </script>

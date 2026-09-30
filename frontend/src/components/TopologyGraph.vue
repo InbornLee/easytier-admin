@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { VueFlow, Handle, Position, type Node, type Edge } from "@vue-flow/core";
 import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
@@ -10,6 +11,8 @@ const props = defineProps<{
   topology: Topology | null;
   loading?: boolean;
 }>();
+
+const { t } = useI18n();
 
 const RADIUS = 260;
 
@@ -92,10 +95,14 @@ function nodeColor(node: Topology["nodes"][number]) {
             </div>
             <div class="topo-ip mono">{{ nodeProps.data.ipv4 || "-" }}</div>
             <div class="topo-meta">
-              <span v-if="nodeProps.data.kind === 'local'">控制台共享节点</span>
+              <span v-if="nodeProps.data.kind === 'local'">{{
+                t("components.topology.consoleSharedNode")
+              }}</span>
               <template v-else>
                 <span v-if="nodeProps.data.latMs != null">{{ nodeProps.data.latMs }} ms</span>
-                <span v-else>{{ nodeProps.data.online ? "已连接" : "未连接" }}</span>
+                <span v-else>{{
+                  nodeProps.data.online ? t("status.node.online") : t("status.node.offline")
+                }}</span>
                 <span v-if="nodeProps.data.tunnelProto && nodeProps.data.tunnelProto !== '-'">
                   · {{ nodeProps.data.tunnelProto }}
                 </span>
@@ -109,10 +116,10 @@ function nodeColor(node: Topology["nodes"][number]) {
         <MiniMap pannable zoomable />
       </VueFlow>
       <div v-else class="empty-block">
-        <n-empty description="暂无节点连接数据">
+        <n-empty :description="t('components.topology.noData')">
           <template #extra>
             <span class="empty-hint">
-              {{ topology?.error || "请先启动网络实例，节点接入后此处将展示连接拓扑" }}
+              {{ topology?.error || t("components.topology.startHint") }}
             </span>
           </template>
         </n-empty>

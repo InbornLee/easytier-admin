@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import type { DataTableColumns } from "naive-ui";
 import { NButton, NIcon } from "naive-ui";
 import { AddOutline, RefreshOutline, TrashOutline } from "@vicons/ionicons5";
@@ -14,6 +15,7 @@ import { formatDuration, formatTime } from "@/utils/format";
 import type { Credential, Network } from "@/types";
 
 const router = useRouter();
+const { t } = useI18n();
 const loading = ref(false);
 const credentials = ref<Credential[]>([]);
 const networks = ref<Network[]>([]);
@@ -58,14 +60,14 @@ function onCreated(payload: { credential: Credential; secret: string }) {
 
 function revoke(cred: Credential) {
   dialog.warning({
-    title: "撤销凭据",
-    content: "撤销后使用该凭据的节点将被移除，确定继续？",
-    positiveText: "撤销",
-    negativeText: "取消",
+    title: t("credentials.revokeTitle"),
+    content: t("credentials.revokeConfirm"),
+    positiveText: t("credentials.revoke"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await credentialApi.revoke(cred.id);
-        message.success("已撤销");
+        message.success(t("credentials.revoked"));
         await load();
       } catch (err) {
         message.error(extractError(err));
@@ -76,14 +78,14 @@ function revoke(cred: Credential) {
 
 function remove(cred: Credential) {
   dialog.error({
-    title: "删除凭据",
-    content: "删除后将同时撤销该凭据并移除记录，使用该凭据的节点将被移除。确定删除？",
-    positiveText: "删除",
-    negativeText: "取消",
+    title: t("credentials.deleteTitle"),
+    content: t("credentials.deleteConfirm"),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await credentialApi.remove(cred.id);
-        message.success("已删除");
+        message.success(t("credentials.deleted"));
         await load();
       } catch (err) {
         message.error(extractError(err));
@@ -95,14 +97,14 @@ function remove(cred: Credential) {
 async function cleanupInvalid() {
   const invalid = credentials.value.filter((c) => c.status !== "active");
   if (invalid.length === 0) {
-    message.info("没有已失效的凭据需要清理");
+    message.info(t("credentials.noInvalid"));
     return;
   }
   dialog.warning({
-    title: "清理失效凭据",
-    content: `将删除 ${invalid.length} 条已过期/已撤销的凭据记录（会同步撤销），确定继续？`,
-    positiveText: "清理",
-    negativeText: "取消",
+    title: t("credentials.cleanupTitle"),
+    content: t("credentials.cleanupConfirm", { n: invalid.length }),
+    positiveText: t("credentials.cleanupAction"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       let ok = 0;
       for (const c of invalid) {
@@ -113,7 +115,7 @@ async function cleanupInvalid() {
           /* ignore individual failure */
         }
       }
-      message.success(`已清理 ${ok} 条凭据`);
+      message.success(t("credentials.cleaned", { n: ok }));
       await load();
     },
   });
@@ -121,12 +123,12 @@ async function cleanupInvalid() {
 
 const columns = computed<DataTableColumns<Credential>>(() => [
   {
-    title: "凭据 ID",
+    title: t("credentials.credentialId"),
     key: "credentialId",
     render: (row) => h("span", { class: "mono" }, row.credentialId),
   },
   {
-    title: "所属网络",
+    title: t("credentials.network"),
     key: "networkId",
     width: 140,
     render: (row) =>
@@ -141,39 +143,43 @@ const columns = computed<DataTableColumns<Credential>>(() => [
       ),
   },
   {
-    title: "状态",
+    title: t("common.status"),
     key: "status",
     width: 100,
     render: (row) => h(StatusTag, { kind: "credential", status: row.status }),
   },
   {
-    title: "剩余有效期",
+    title: t("credentials.remaining"),
     key: "remaining",
     width: 130,
     render: (row) =>
       row.status === "active" ? formatDuration(row.remainingSeconds) : "-",
   },
   {
-    title: "到期时间",
+    title: t("credentials.expiresAt"),
     key: "expiresAt",
     width: 170,
     render: (row) => formatTime(row.expiresAt),
   },
   {
-    title: "权限",
+    title: t("credentials.perms"),
     key: "perms",
     render: (row) =>
       [
-        row.allowRelay ? "允许中继" : "禁止中继",
-        row.reusable ? "可复用" : "独占",
-        row.groups.length ? `分组:${row.groups.join(",")}` : null,
-        row.allowedProxyCidrs.length ? `代理:${row.allowedProxyCidrs.join(",")}` : null,
+        row.allowRelay ? t("credentials.relayAllowed") : t("credentials.relayDenied"),
+        row.reusable ? t("credentials.reusableTag") : t("credentials.exclusive"),
+        row.groups.length
+          ? t("credentials.groupsPrefix", { list: row.groups.join(",") })
+          : null,
+        row.allowedProxyCidrs.length
+          ? t("credentials.proxyPrefix", { list: row.allowedProxyCidrs.join(",") })
+          : null,
       ]
         .filter(Boolean)
         .join(" · "),
   },
   {
-    title: "操作",
+    title: t("common.actions"),
     key: "actions",
     width: 160,
     fixed: "right",
@@ -188,7 +194,7 @@ const columns = computed<DataTableColumns<Credential>>(() => [
                 type: "warning",
                 onClick: () => revoke(row),
               },
-              { default: () => "撤销" },
+              { default: () => t("credentials.revoke") },
             )
           : null,
         h(
@@ -207,29 +213,29 @@ onMounted(load);
   <div class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">凭据管理</h1>
-        <div class="page-subtitle">通过短期凭据让设备安全接入网络，无需分发网络主密钥</div>
+        <h1 class="page-title">{{ t("credentials.title") }}</h1>
+        <div class="page-subtitle">{{ t("credentials.subtitle") }}</div>
       </div>
       <div class="header-actions">
         <n-select
           v-model:value="filterNetwork"
           :options="networks.map((n) => ({ label: n.name, value: n.id }))"
-          placeholder="全部网络"
+          :placeholder="t('credentials.allNetworks')"
           clearable
           size="small"
           style="width: 170px"
         />
         <n-button size="small" @click="load">
           <template #icon><n-icon :component="RefreshOutline" /></template>
-          刷新
+          {{ t("common.refresh") }}
         </n-button>
         <n-button size="small" @click="cleanupInvalid">
           <template #icon><n-icon :component="TrashOutline" /></template>
-          清理失效
+          {{ t("credentials.cleanup") }}
         </n-button>
         <n-button size="small" type="primary" @click="showCredModal = true">
           <template #icon><n-icon :component="AddOutline" /></template>
-          签发临时凭据
+          {{ t("credentials.issue") }}
         </n-button>
       </div>
     </div>
@@ -254,27 +260,27 @@ onMounted(load);
     <n-modal
       v-model:show="secretModal"
       preset="card"
-      title="凭据已签发"
+      :title="t('credentials.issued')"
       style="width: 560px; max-width: 94vw"
     >
       <n-alert type="warning" :show-icon="true" class="mb">
-        凭据密钥仅在此处显示一次，请立即复制并通过安全渠道发送给目标设备。
+        {{ t("credentials.secretWarning") }}
       </n-alert>
       <n-descriptions v-if="secretCredential" :column="1" size="small" bordered class="mb">
-        <n-descriptions-item label="凭据 ID">
+        <n-descriptions-item :label="t('credentials.credentialId')">
           <span class="mono">{{ secretCredential.credentialId }}</span>
         </n-descriptions-item>
-        <n-descriptions-item label="到期时间">
+        <n-descriptions-item :label="t('credentials.expiresAt')">
           {{ formatTime(secretCredential.expiresAt) }}
         </n-descriptions-item>
-        <n-descriptions-item label="凭据密钥">
+        <n-descriptions-item :label="t('credentials.secretLabel')">
           <CopyText :text="secretValue" />
         </n-descriptions-item>
       </n-descriptions>
       <div class="code-block mono">{{ secretValue }}</div>
       <template #footer>
         <div class="modal-footer">
-          <n-button type="primary" @click="secretModal = false">我已保存</n-button>
+          <n-button type="primary" @click="secretModal = false">{{ t("credentials.savedSecret") }}</n-button>
         </div>
       </template>
     </n-modal>

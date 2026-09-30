@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import type { DataTableColumns } from "naive-ui";
 import { NButton, NIcon, NTag } from "naive-ui";
 import {
@@ -22,6 +23,7 @@ import { costInfo, formatBytes, formatTime } from "@/utils/format";
 import type { Network, NodeItem } from "@/types";
 
 const router = useRouter();
+const { t } = useI18n();
 const loading = ref(false);
 const nodes = ref<NodeItem[]>([]);
 const networks = ref<Network[]>([]);
@@ -93,14 +95,14 @@ async function onRotated(payload: { node: NodeItem }) {
 }
 function remove(node: NodeItem) {
   dialog.error({
-    title: "删除节点",
-    content: `确定删除节点「${node.name}」吗？`,
-    positiveText: "删除",
-    negativeText: "取消",
+    title: t("nodes.deleteTitle"),
+    content: t("nodes.deleteConfirm", { name: node.name }),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await nodeApi.remove(node.id);
-        message.success("已删除");
+        message.success(t("nodes.deleted"));
         await load();
       } catch (err) {
         message.error(extractError(err));
@@ -111,21 +113,21 @@ function remove(node: NodeItem) {
 
 const columns = computed<DataTableColumns<NodeItem>>(() => [
   {
-    title: "节点",
+    title: t("nodes.colNode"),
     key: "name",
     render: (row) =>
       h("div", {}, [
         h("div", { class: "cell-name" }, [
           row.name,
           !row.credentialId
-            ? h("span", { class: "no-cred" }, "无凭据")
+            ? h("span", { class: "no-cred" }, t("nodes.noCredential"))
             : null,
         ]),
         h("div", { class: "cell-sub mono" }, `${row.hostname} · ${row.ipv4 || "DHCP"}`),
       ]),
   },
   {
-    title: "所属网络",
+    title: t("nodes.colNetwork"),
     key: "networkId",
     width: 140,
     render: (row) =>
@@ -140,13 +142,13 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
       ),
   },
   {
-    title: "状态",
+    title: t("common.status"),
     key: "status",
     width: 90,
     render: (row) => h(StatusTag, { kind: "node", status: row.status }),
   },
   {
-    title: "链路",
+    title: t("nodes.colLink"),
     key: "cost",
     width: 110,
     render: (row) => {
@@ -160,14 +162,14 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
     },
   },
   {
-    title: "延迟",
+    title: t("nodes.colLatency"),
     key: "lat",
     width: 90,
     render: (row) =>
       row.live?.online && row.live.latMs != null ? `${row.live.latMs} ms` : "-",
   },
   {
-    title: "流量",
+    title: t("nodes.colTraffic"),
     key: "traffic",
     width: 150,
     render: (row) =>
@@ -176,7 +178,7 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
         : "-",
   },
   {
-    title: "隧道 / NAT",
+    title: t("nodes.colTunnel"),
     key: "tunnel",
     width: 130,
     render: (row) =>
@@ -185,13 +187,13 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
         : "-",
   },
   {
-    title: "最后在线",
+    title: t("nodes.colLastSeen"),
     key: "lastSeenAt",
     width: 165,
     render: (row) => (row.lastSeenAt ? formatTime(row.lastSeenAt) : "-"),
   },
   {
-    title: "操作",
+    title: t("common.actions"),
     key: "actions",
     width: 280,
     fixed: "right",
@@ -200,22 +202,22 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
         h(
           NButton,
           { size: "tiny", quaternary: true, type: "primary", onClick: () => openJoin(row) },
-          { icon: () => h(NIcon, { component: LinkOutline }), default: () => "接入" },
+          { icon: () => h(NIcon, { component: LinkOutline }), default: () => t("nodes.actionJoin") },
         ),
         h(
           NButton,
           { size: "tiny", quaternary: true, onClick: () => openEdit(row) },
-          { icon: () => h(NIcon, { component: CreateOutline }), default: () => "编辑" },
+          { icon: () => h(NIcon, { component: CreateOutline }), default: () => t("common.edit") },
         ),
         h(
           NButton,
           { size: "tiny", quaternary: true, onClick: () => rotate(row) },
-          { icon: () => h(NIcon, { component: ShieldOutline }), default: () => "换凭据" },
+          { icon: () => h(NIcon, { component: ShieldOutline }), default: () => t("nodes.actionRotate") },
         ),
         h(
           NButton,
           { size: "tiny", quaternary: true, type: "error", onClick: () => remove(row) },
-          { icon: () => h(NIcon, { component: TrashOutline }), default: () => "删除" },
+          { icon: () => h(NIcon, { component: TrashOutline }), default: () => t("common.delete") },
         ),
       ]),
   },
@@ -228,25 +230,25 @@ onMounted(load);
   <div class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">节点管理</h1>
-        <div class="page-subtitle">管理通过凭据接入网络的客户端节点</div>
+        <h1 class="page-title">{{ t("nodes.title") }}</h1>
+        <div class="page-subtitle">{{ t("nodes.subtitle") }}</div>
       </div>
       <div class="header-actions">
         <n-select
           v-model:value="filterNetwork"
           :options="networks.map((n) => ({ label: n.name, value: n.id }))"
-          placeholder="全部网络"
+          :placeholder="t('nodes.allNetworks')"
           clearable
           size="small"
           style="width: 170px"
         />
         <n-button size="small" @click="load">
           <template #icon><n-icon :component="RefreshOutline" /></template>
-          刷新
+          {{ t("common.refresh") }}
         </n-button>
         <n-button size="small" type="primary" @click="openCreate">
           <template #icon><n-icon :component="AddOutline" /></template>
-          新建节点
+          {{ t("nodes.createTitle") }}
         </n-button>
       </div>
     </div>

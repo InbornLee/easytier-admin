@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import type { DataTableColumns } from "naive-ui";
 import { NButton, NIcon } from "naive-ui";
 import {
@@ -25,6 +26,7 @@ import type { Network } from "@/types";
 
 const router = useRouter();
 const auth = useAuthStore();
+const { t } = useI18n();
 const loading = ref(false);
 const networks = ref<Network[]>([]);
 const actionLoading = ref<string | null>(null);
@@ -41,14 +43,14 @@ function canManage(row: Network): boolean {
 }
 
 function accessLabel(row: Network): string {
-  if (auth.user?.role === "admin") return "管理员";
+  if (auth.user?.role === "admin") return t("role.admin");
   switch (row.access) {
     case "owner":
-      return "我的";
+      return t("networks.accessOwner");
     case "manage":
-      return "可管理";
+      return t("networks.accessManage");
     default:
-      return "只读";
+      return t("networks.accessReadonly");
   }
 }
 
@@ -73,52 +75,56 @@ function openDetail(row: Network) {
 
 const columns = computed<DataTableColumns<Network>>(() => [
   {
-    title: "网络",
+    title: t("networks.colNetwork"),
     key: "name",
     render: (row) =>
       h("div", { class: "cell-network" }, [
         h("div", { class: "cell-name" }, row.name),
-        h("div", { class: "cell-sub" }, `标识: ${row.networkName} · ${row.ipv4}`),
+        h(
+          "div",
+          { class: "cell-sub" },
+          t("networks.identifier", { networkName: row.networkName, ipv4: row.ipv4 }),
+        ),
       ]),
   },
   {
-    title: "状态",
+    title: t("common.status"),
     key: "status",
     width: 100,
     render: (row) => h(StatusTag, { kind: "network", status: row.status }),
   },
   {
-    title: "监听端口",
+    title: t("networks.colListenPort"),
     key: "listenPort",
     width: 120,
     render: (row) => h("span", { class: "mono" }, `${row.listenPort}/${row.rpcPort}`),
   },
   {
-    title: "安全模式",
+    title: t("networks.colSecureMode"),
     key: "secureMode",
     width: 100,
-    render: (row) => (row.secureMode ? "开启" : "关闭"),
+    render: (row) => (row.secureMode ? t("common.enabled") : t("common.disabled")),
   },
   {
-    title: "自动启动",
+    title: t("networks.colAutoStart"),
     key: "autoStart",
     width: 90,
-    render: (row) => (row.autoStart ? "是" : "否"),
+    render: (row) => (row.autoStart ? t("common.yes") : t("common.no")),
   },
   {
-    title: "权限",
+    title: t("networks.colAccess"),
     key: "access",
     width: 100,
     render: (row) => accessLabel(row),
   },
   {
-    title: "创建时间",
+    title: t("networks.colCreatedAt"),
     key: "createdAt",
     width: 170,
     render: (row) => formatTime(row.createdAt),
   },
   {
-    title: "操作",
+    title: t("common.actions"),
     key: "actions",
     width: 320,
     fixed: "right",
@@ -136,7 +142,7 @@ const columns = computed<DataTableColumns<Network>>(() => [
               openDetail(row);
             },
           },
-          { icon: () => h(NIcon, { component: EyeOutline }), default: () => "节点" },
+          { icon: () => h(NIcon, { component: EyeOutline }), default: () => t("networks.viewNodes") },
         ),
       ];
       if (manage) {
@@ -199,7 +205,7 @@ const columns = computed<DataTableColumns<Network>>(() => [
             },
             {
               icon: () => h(NIcon, { component: ShareSocialOutline }),
-              default: () => "分享",
+              default: () => t("networks.share"),
             },
           ),
         );
@@ -261,7 +267,11 @@ async function doAction(row: Network, action: "start" | "stop" | "restart") {
   try {
     await networkApi[action](row.id);
     message.success(
-      action === "start" ? "已启动" : action === "stop" ? "已停止" : "已重启",
+      action === "start"
+        ? t("networks.started")
+        : action === "stop"
+          ? t("networks.stopped")
+          : t("networks.restarted"),
     );
     await load();
   } catch (err) {
@@ -273,14 +283,14 @@ async function doAction(row: Network, action: "start" | "stop" | "restart") {
 
 function removeNetwork(row: Network) {
   dialog.error({
-    title: "删除网络",
-    content: `确定删除网络「${row.name}」吗？该网络下的节点与凭据将一并删除，且不可恢复。`,
-    positiveText: "删除",
-    negativeText: "取消",
+    title: t("action.networkDelete"),
+    content: t("networks.deleteConfirm", { name: row.name }),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await networkApi.remove(row.id);
-        message.success("已删除");
+        message.success(t("networks.deleted"));
         await load();
       } catch (err) {
         message.error(extractError(err));
@@ -308,19 +318,17 @@ onMounted(load);
   <div class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">网络管理</h1>
-        <div class="page-subtitle">
-          创建并管理 EasyTier 虚拟网络（控制台共享节点）· 点击任意网络查看节点连接情况
-        </div>
+        <h1 class="page-title">{{ t("nav.networks") }}</h1>
+        <div class="page-subtitle">{{ t("networks.subtitle") }}</div>
       </div>
       <div class="header-actions">
         <n-button size="small" @click="load">
           <template #icon><n-icon :component="RefreshOutline" /></template>
-          刷新
+          {{ t("common.refresh") }}
         </n-button>
         <n-button size="small" type="primary" @click="openCreate">
           <template #icon><n-icon :component="AddOutline" /></template>
-          新建网络
+          {{ t("networks.newNetwork") }}
         </n-button>
       </div>
     </div>

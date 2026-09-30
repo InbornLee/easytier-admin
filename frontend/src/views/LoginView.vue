@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import type { FormInst } from "naive-ui";
 import { GitNetworkOutline } from "@vicons/ionicons5";
+import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { useAuthStore } from "@/stores/auth";
 import { message } from "@/utils/feedback";
 import { extractError } from "@/api/client";
@@ -10,19 +12,20 @@ import { extractError } from "@/api/client";
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
+const { t } = useI18n();
 const formRef = ref<FormInst | null>(null);
 const loading = ref(false);
 const model = reactive({ username: "", password: "" });
 
 async function submit() {
   if (!model.username || !model.password) {
-    message.warning("请输入用户名和密码");
+    message.warning(t("auth.needCredentials"));
     return;
   }
   loading.value = true;
   try {
     await auth.login(model.username, model.password);
-    message.success("登录成功");
+    message.success(t("auth.loginSuccess"));
     const redirect = (route.query.redirect as string) || "/";
     router.push(redirect);
   } catch (err) {
@@ -35,31 +38,32 @@ async function submit() {
 
 <template>
   <div class="auth-page">
+    <LanguageSwitcher class="lang-corner" />
     <n-card class="auth-card" :bordered="false">
       <div class="auth-head">
         <div class="auth-logo">
           <n-icon :component="GitNetworkOutline" :size="28" />
         </div>
-        <h1>EasyTier 控制台</h1>
-        <p>简单、安全、去中心化的网络与节点管理平台</p>
+        <h1>{{ t("auth.loginTitle") }}</h1>
+        <p>{{ t("auth.loginSubtitle") }}</p>
       </div>
       <n-form ref="formRef" :model="model" size="large" @keydown.enter.prevent="submit">
-        <n-form-item label="用户名">
-          <n-input v-model:value="model.username" placeholder="请输入用户名" />
+        <n-form-item :label="t('auth.username')">
+          <n-input v-model:value="model.username" :placeholder="t('auth.usernamePlaceholder')" />
         </n-form-item>
-        <n-form-item label="密码">
+        <n-form-item :label="t('auth.password')">
           <n-input
             v-model:value="model.password"
             type="password"
             show-password-on="click"
-            placeholder="请输入密码"
+            :placeholder="t('auth.passwordPlaceholder')"
           />
         </n-form-item>
         <n-button type="primary" block size="large" :loading="loading" @click="submit">
-          登录
+          {{ t("auth.login") }}
         </n-button>
       </n-form>
-      <div class="auth-foot">EasyTier · 基于 easytier-core / easytier-cli 构建</div>
+      <div class="auth-foot">{{ t("app.footer") }}</div>
     </n-card>
   </div>
 </template>
@@ -74,6 +78,11 @@ async function submit() {
   background: radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.16), transparent 45%),
     radial-gradient(circle at 80% 70%, rgba(13, 148, 136, 0.16), transparent 45%),
     var(--et-bg);
+}
+.lang-corner {
+  position: fixed;
+  top: 16px;
+  right: 16px;
 }
 :global(.dark) .auth-page {
   background: radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.22), transparent 45%),

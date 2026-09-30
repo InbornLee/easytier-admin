@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { NIcon } from "naive-ui";
 import { TrashOutline } from "@vicons/ionicons5";
 import { networkApi, userApi } from "@/api";
@@ -24,6 +25,7 @@ const visible = computed({
 });
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const loading = ref(false);
 const saving = ref(false);
 const shares = ref<NetworkShares | null>(null);
@@ -33,10 +35,10 @@ const selectedPermission = ref<"view" | "manage">("view");
 const transferUserId = ref<string | null>(null);
 const transferring = ref(false);
 
-const permissionOptions = [
-  { label: "只读", value: "view" },
-  { label: "可管理", value: "manage" },
-];
+const permissionOptions = computed(() => [
+  { label: t("networkForm.share.permissionReadonly"), value: "view" },
+  { label: t("networkForm.share.permissionManage"), value: "manage" },
+]);
 
 const sharedIds = computed(
   () => new Set((shares.value?.items ?? []).map((i) => i.userId)),
@@ -77,14 +79,18 @@ const transferOptions = computed(() =>
 
 const ownerLabel = computed(() => {
   if (!props.network) return "-";
-  if (props.network.ownerId && props.network.ownerId === auth.user?.id) return "我";
-  return shares.value?.owner?.username ?? props.network.ownerId ?? "未知";
+  if (props.network.ownerId && props.network.ownerId === auth.user?.id)
+    return t("networkForm.share.self");
+  return shares.value?.owner?.username ?? props.network.ownerId ?? t("common.unknown");
 });
 
 function roleLabel(role: string) {
-  return ({ admin: "管理员", operator: "运维", viewer: "访客" } as Record<string, string>)[
-    role
-  ] ?? role;
+  const labels: Record<string, string> = {
+    admin: t("role.admin"),
+    operator: t("role.operator"),
+    viewer: t("role.viewer"),
+  };
+  return labels[role] ?? role;
 }
 
 async function load() {
@@ -116,7 +122,7 @@ watch(
 
 async function addShare() {
   if (!props.network || !selectedUserId.value) {
-    message.warning("请选择要分享的用户");
+    message.warning(t("networkForm.share.selectUserRequired"));
     return;
   }
   saving.value = true;
@@ -125,7 +131,7 @@ async function addShare() {
       userId: selectedUserId.value,
       permission: selectedPermission.value,
     });
-    message.success("已分享");
+    message.success(t("networkForm.share.shared"));
     selectedUserId.value = null;
     await load();
   } catch (err) {
@@ -139,7 +145,7 @@ async function changePermission(item: NetworkShare, perm: "view" | "manage") {
   if (!props.network) return;
   try {
     await networkApi.share(props.network.id, { userId: item.userId, permission: perm });
-    message.success("权限已更新");
+    message.success(t("networkForm.share.permissionUpdated"));
     await load();
   } catch (err) {
     message.error(extractError(err));
@@ -149,14 +155,14 @@ async function changePermission(item: NetworkShare, perm: "view" | "manage") {
 function removeShare(item: NetworkShare) {
   if (!props.network) return;
   dialog.warning({
-    title: "取消分享",
-    content: `确定取消对「${item.username}」的分享吗？`,
-    positiveText: "取消分享",
-    negativeText: "返回",
+    title: t("networkForm.share.unshareTitle"),
+    content: t("networkForm.share.unshareContent", { name: item.username }),
+    positiveText: t("networkForm.share.unshareTitle"),
+    negativeText: t("common.back"),
     onPositiveClick: async () => {
       try {
         await networkApi.unshare(props.network!.id, item.userId);
-        message.success("已取消分享");
+        message.success(t("networkForm.share.unshared"));
         await load();
       } catch (err) {
         message.error(extractError(err));
@@ -167,22 +173,23 @@ function removeShare(item: NetworkShare) {
 
 function transfer() {
   if (!props.network || !transferUserId.value) {
-    message.warning("请选择要转移到的用户");
+    message.warning(t("networkForm.share.transferRequired"));
     return;
   }
   const target = users.value.find((u) => u.id === transferUserId.value);
   dialog.warning({
-    title: "转移网络归属",
-    content: `确定将网络「${props.network.name}」的归属转移给「${
-      target?.username ?? ""
-    }」吗？原所有者将保留「可管理」权限。`,
-    positiveText: "确认转移",
-    negativeText: "取消",
+    title: t("networkForm.share.transferTitle"),
+    content: t("networkForm.share.transferContent", {
+      network: props.network.name,
+      user: target?.username ?? "",
+    }),
+    positiveText: t("networkForm.share.transferConfirm"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       transferring.value = true;
       try {
         await networkApi.transfer(props.network!.id, transferUserId.value!);
-        message.success("归属已转移");
+        message.success(t("networkForm.share.transferred"));
         transferUserId.value = null;
         emit("transferred");
         await load();
@@ -200,24 +207,24 @@ function transfer() {
   <n-modal
     v-model:show="visible"
     preset="card"
-    title="分享网络"
+    :title="t('networkForm.share.title')"
     style="width: 640px; max-width: 94vw"
     :mask-closable="false"
   >
     <n-spin :show="loading">
       <n-alert type="info" :show-icon="true" class="mb">
-        被分享的用户可在「网络管理」中看到该网络。<strong>只读</strong>仅可查看与获取接入信息；
-        <strong>可管理</strong>可编辑网络、启停及管理节点与凭据。
+        {{ t("networkForm.share.alertPrefix") }}<strong>{{ t("networkForm.share.permissionReadonly") }}</strong>{{ t("networkForm.share.alertReadonlySuffix") }}
+        <strong>{{ t("networkForm.share.permissionManage") }}</strong>{{ t("networkForm.share.alertManageSuffix") }}
       </n-alert>
 
       <div v-if="network" class="owner-row">
-        <span class="label">所有者</span>
+        <span class="label">{{ t("networkForm.share.owner") }}</span>
         <n-tag size="small" :bordered="false" type="success">{{ ownerLabel }}</n-tag>
         <span class="owner-name">{{ network.name }}</span>
       </div>
 
-      <n-divider title-placement="left" style="margin: 8px 0 12px">已分享用户</n-divider>
-      <div v-if="shares && shares.items.length === 0" class="empty">尚未分享给任何用户</div>
+      <n-divider title-placement="left" style="margin: 8px 0 12px">{{ t("networkForm.share.sharedUsers") }}</n-divider>
+      <div v-if="shares && shares.items.length === 0" class="empty">{{ t("networkForm.share.noShares") }}</div>
       <div v-for="item in shares?.items ?? []" :key="item.userId" class="share-row">
         <div class="share-user">
           <span class="mono">{{ item.username }}</span>
@@ -235,14 +242,14 @@ function transfer() {
         </n-button>
       </div>
 
-      <n-divider title-placement="left" style="margin: 16px 0 12px">添加分享</n-divider>
+      <n-divider title-placement="left" style="margin: 16px 0 12px">{{ t("networkForm.share.addShare") }}</n-divider>
       <div class="add-row">
         <n-select
           v-model:value="selectedUserId"
           filterable
           clearable
           size="small"
-          placeholder="选择用户"
+          :placeholder="t('networkForm.share.selectUser')"
           :options="candidateOptions"
           style="flex: 1"
         />
@@ -252,13 +259,13 @@ function transfer() {
           style="width: 120px"
           :options="permissionOptions"
         />
-        <n-button size="small" type="primary" :loading="saving" @click="addShare">分享</n-button>
+        <n-button size="small" type="primary" :loading="saving" @click="addShare">{{ t("networkForm.share.shareAction") }}</n-button>
       </div>
 
       <template v-if="canTransfer">
-        <n-divider title-placement="left" style="margin: 18px 0 12px">归属转移</n-divider>
+        <n-divider title-placement="left" style="margin: 18px 0 12px">{{ t("networkForm.share.transferSection") }}</n-divider>
         <n-alert type="warning" :show-icon="true" class="mb" style="font-size: 12px">
-          转移后该网络归属于目标用户；原所有者将保留「可管理」权限。此操作会记录审计日志。
+          {{ t("networkForm.share.transferAlert") }}
         </n-alert>
         <div class="add-row">
           <n-select
@@ -266,12 +273,12 @@ function transfer() {
             filterable
             clearable
             size="small"
-            placeholder="选择新的所有者"
+            :placeholder="t('networkForm.share.selectNewOwner')"
             :options="transferOptions"
             style="flex: 1"
           />
           <n-button size="small" type="warning" :loading="transferring" @click="transfer">
-            转移归属
+            {{ t("networkForm.share.transferAction") }}
           </n-button>
         </div>
       </template>
@@ -279,7 +286,7 @@ function transfer() {
 
     <template #footer>
       <div class="modal-footer">
-        <n-button @click="visible = false">关闭</n-button>
+        <n-button @click="visible = false">{{ t("common.close") }}</n-button>
       </div>
     </template>
   </n-modal>

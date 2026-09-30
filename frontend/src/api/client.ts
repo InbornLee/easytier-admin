@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from "axios";
+import { translate } from "@/i18n";
 
 const client = axios.create({
   baseURL: "/",
@@ -26,12 +27,12 @@ export function extractError(error: unknown): string {
       | { message?: string; issues?: Array<{ path: string; message: string }> }
       | undefined;
     if (data?.issues?.length) {
-      return data.issues.map((i) => i.message).join("；");
+      return data.issues.map((i) => i.message).join(translate("error.issuesJoin"));
     }
     if (data?.message) return data.message;
-    if (error.code === "ECONNABORTED") return "请求超时，请稍后重试";
-    if (!error.response) return "无法连接到服务器";
-    return `请求失败 (${error.response.status})`;
+    if (error.code === "ECONNABORTED") return translate("error.timeout");
+    if (!error.response) return translate("error.offline");
+    return translate("error.requestFailed", { status: error.response.status });
   }
   if (error instanceof Error) return error.message;
   return String(error);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import {
   GitNetworkOutline,
   ServerOutline,
@@ -18,6 +19,7 @@ import { actionLabel, formatRelative, formatTime } from "@/utils/format";
 import type { DashboardSummary, SystemBinaries, TrafficPoint } from "@/types";
 
 const router = useRouter();
+const { t } = useI18n();
 const loading = ref(true);
 const summary = ref<DashboardSummary | null>(null);
 const traffic = ref<TrafficPoint[]>([]);
@@ -26,13 +28,13 @@ const binaries = ref<SystemBinaries | null>(null);
 async function load() {
   loading.value = true;
   try {
-    const [s, t, b] = await Promise.all([
+    const [s, tr, b] = await Promise.all([
       dashboardApi.summary(),
       dashboardApi.traffic(undefined, 1),
       systemApi.binaries(),
     ]);
     summary.value = s;
-    traffic.value = t;
+    traffic.value = tr;
     binaries.value = b;
   } catch (err) {
     message.error(extractError(err));
@@ -48,17 +50,17 @@ onMounted(load);
   <div class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">概览</h1>
-        <div class="page-subtitle">EasyTier 网络运行状态一览</div>
+        <h1 class="page-title">{{ t("dashboard.title") }}</h1>
+        <div class="page-subtitle">{{ t("dashboard.subtitle") }}</div>
       </div>
       <div class="header-actions">
         <n-button size="small" @click="load">
           <template #icon><n-icon :component="RefreshOutline" /></template>
-          刷新
+          {{ t("common.refresh") }}
         </n-button>
         <n-button size="small" type="primary" @click="router.push({ name: 'networks' })">
           <template #icon><n-icon :component="AddOutline" /></template>
-          新建网络
+          {{ t("dashboard.newNetwork") }}
         </n-button>
       </div>
     </div>
@@ -67,44 +69,50 @@ onMounted(load);
       v-if="binaries && (!binaries.core.available || !binaries.cli.available)"
       type="warning"
       class="mb"
-      title="EasyTier 二进制不可用"
+      :title="t('dashboard.binaryWarningTitle')"
     >
-      <div>
-        控制台未检测到 <span class="mono">easytier-core</span> 或
-        <span class="mono">easytier-cli</span>，网络实例将无法启动、状态与凭据功能不可用。
-        请在「系统设置」中配置正确的二进制路径。
-      </div>
+      <div v-html="t('dashboard.binaryWarningBody')" />
     </n-alert>
 
     <div class="stat-grid">
       <StatCard
-        label="网络总数"
+        :label="t('dashboard.statNetworks')"
         :value="summary?.networks.total ?? 0"
-        :hint="`${summary?.networks.running ?? 0} 个运行中 · ${summary?.networks.error ?? 0} 个异常`"
+        :hint="
+          t('dashboard.statNetworksHint', {
+            running: summary?.networks.running ?? 0,
+            error: summary?.networks.error ?? 0,
+          })
+        "
         color="#2563eb"
         :icon="GitNetworkOutline"
         :loading="loading"
       />
       <StatCard
-        label="节点总数"
+        :label="t('dashboard.statNodes')"
         :value="summary?.nodes.total ?? 0"
-        :hint="`${summary?.nodes.online ?? 0} 在线 · ${summary?.nodes.offline ?? 0} 离线`"
+        :hint="
+          t('dashboard.statNodesHint', {
+            online: summary?.nodes.online ?? 0,
+            offline: summary?.nodes.offline ?? 0,
+          })
+        "
         color="#0d9488"
         :icon="ServerOutline"
         :loading="loading"
       />
       <StatCard
-        label="有效凭据"
+        :label="t('dashboard.statCredentials')"
         :value="summary?.credentials.active ?? 0"
-        :hint="`${summary?.credentials.expiringSoon ?? 0} 个 24 小时内过期`"
+        :hint="t('dashboard.statCredentialsHint', { soon: summary?.credentials.expiringSoon ?? 0 })"
         color="#7c3aed"
         :icon="KeyOutline"
         :loading="loading"
       />
       <StatCard
-        label="近 24h 错误日志"
+        :label="t('dashboard.statErrors')"
         :value="summary?.recentErrors.length ?? 0"
-        hint="来自节点运行日志"
+        :hint="t('dashboard.statErrorsHint')"
         color="#e5484d"
         :icon="WarningOutline"
         :loading="loading"
@@ -113,15 +121,15 @@ onMounted(load);
 
     <n-grid :cols="24" :x-gap="16" :y-gap="16" class="mt">
       <n-gi :span="16">
-        <n-card title="全局流量（近 1 小时）" size="small">
+        <n-card :title="t('dashboard.trafficTitle')" size="small">
           <TrafficChart :series="traffic" :height="300" />
         </n-card>
       </n-gi>
       <n-gi :span="8">
-        <n-card title="最近操作" size="small" class="h-full">
+        <n-card :title="t('dashboard.recentAuditTitle')" size="small" class="h-full">
           <n-empty
             v-if="!summary?.recentAudit.length"
-            description="暂无操作记录"
+            :description="t('dashboard.recentAuditEmpty')"
             style="margin: 30px 0"
           />
           <n-timeline v-else>
@@ -134,7 +142,7 @@ onMounted(load);
               <div class="audit-line">
                 <strong>{{ actionLabel(item.action) }}</strong>
                 <span class="audit-meta">
-                  {{ item.username ?? "系统" }} · {{ item.resourceType ?? "" }}
+                  {{ item.username ?? t("common.system") }} · {{ item.resourceType ?? "" }}
                 </span>
               </div>
             </n-timeline-item>
@@ -142,8 +150,8 @@ onMounted(load);
         </n-card>
       </n-gi>
       <n-gi :span="24">
-        <n-card title="最近错误日志" size="small">
-          <n-empty v-if="!summary?.recentErrors.length" description="暂无错误日志" />
+        <n-card :title="t('dashboard.recentErrorsTitle')" size="small">
+          <n-empty v-if="!summary?.recentErrors.length" :description="t('dashboard.recentErrorsEmpty')" />
           <n-list v-else hoverable>
             <n-list-item v-for="item in summary.recentErrors" :key="item.id">
               <div class="err-line">

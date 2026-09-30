@@ -1,0 +1,51 @@
+export default {
+  zhCN: {
+    networks: {
+      subtitle:
+        "创建并管理 EasyTier 虚拟网络（控制台共享节点）· 点击任意网络查看节点连接情况",
+      newNetwork: "新建网络",
+      colNetwork: "网络",
+      identifier: "标识: {networkName} · {ipv4}",
+      colListenPort: "监听端口",
+      colSecureMode: "安全模式",
+      colAutoStart: "自动启动",
+      colAccess: "权限",
+      colCreatedAt: "创建时间",
+      viewNodes: "节点",
+      share: "分享",
+      accessOwner: "我的",
+      accessManage: "可管理",
+      accessReadonly: "只读",
+      started: "已启动",
+      stopped: "已停止",
+      restarted: "已重启",
+      deleteConfirm: "确定删除网络「{name}」吗？该网络下的节点与凭据将一并删除，且不可恢复。",
+      deleted: "已删除",
+    },
+  },
+  en: {
+    networks: {
+      subtitle:
+        "Create and manage EasyTier virtual networks (console shared nodes) · Click any network to view its node connections",
+      newNetwork: "New network",
+      colNetwork: "Network",
+      identifier: "ID: {networkName} · {ipv4}",
+      colListenPort: "Listen port",
+      colSecureMode: "Security mode",
+      colAutoStart: "Auto start",
+      colAccess: "Access",
+      colCreatedAt: "Created",
+      viewNodes: "Nodes",
+      share: "Share",
+      accessOwner: "Mine",
+      accessManage: "Manage",
+      accessReadonly: "Read-only",
+      started: "Started",
+      stopped: "Stopped",
+      restarted: "Restarted",
+      deleteConfirm:
+        'Delete network "{name}"? All nodes and credentials under this network will be deleted as well and cannot be recovered.',
+      deleted: "Deleted",
+    },
+  },
+};

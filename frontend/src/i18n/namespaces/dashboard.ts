@@ -1,0 +1,48 @@
+export default {
+  zhCN: {
+    dashboard: {
+      title: "概览",
+      subtitle: "EasyTier 网络运行状态一览",
+      newNetwork: "新建网络",
+      binaryWarningTitle: "EasyTier 二进制不可用",
+      binaryWarningBody:
+        '控制台未检测到 <span class="mono">easytier-core</span> 或 <span class="mono">easytier-cli</span>，网络实例将无法启动、状态与凭据功能不可用。请在「系统设置」中配置正确的二进制路径。',
+      statNetworks: "网络总数",
+      statNetworksHint: "{running} 个运行中 · {error} 个异常",
+      statNodes: "节点总数",
+      statNodesHint: "{online} 在线 · {offline} 离线",
+      statCredentials: "有效凭据",
+      statCredentialsHint: "{soon} 个 24 小时内过期",
+      statErrors: "近 24h 错误日志",
+      statErrorsHint: "来自节点运行日志",
+      trafficTitle: "全局流量（近 1 小时）",
+      recentAuditTitle: "最近操作",
+      recentAuditEmpty: "暂无操作记录",
+      recentErrorsTitle: "最近错误日志",
+      recentErrorsEmpty: "暂无错误日志",
+    },
+  },
+  en: {
+    dashboard: {
+      title: "Dashboard",
+      subtitle: "An overview of EasyTier network status",
+      newNetwork: "New network",
+      binaryWarningTitle: "EasyTier binaries unavailable",
+      binaryWarningBody:
+        'Neither <span class="mono">easytier-core</span> nor <span class="mono">easytier-cli</span> was detected. Network instances cannot start and status/credential features are unavailable. Please configure the correct binary paths in "Settings".',
+      statNetworks: "Networks",
+      statNetworksHint: "{running} running · {error} error",
+      statNodes: "Nodes",
+      statNodesHint: "{online} online · {offline} offline",
+      statCredentials: "Active credentials",
+      statCredentialsHint: "{soon} expiring within 24h",
+      statErrors: "Errors (last 24h)",
+      statErrorsHint: "From node runtime logs",
+      trafficTitle: "Global traffic (last hour)",
+      recentAuditTitle: "Recent activity",
+      recentAuditEmpty: "No activity yet",
+      recentErrorsTitle: "Recent error logs",
+      recentErrorsEmpty: "No error logs",
+    },
+  },
+};

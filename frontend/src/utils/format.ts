@@ -1,9 +1,18 @@
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
+import "dayjs/locale/en";
+import { getLocale, translate } from "@/i18n";
 
 dayjs.extend(relativeTime);
-dayjs.locale("zh-cn");
+
+function syncDayjsLocale(): void {
+  dayjs.locale(getLocale() === "zh-CN" ? "zh-cn" : "en");
+}
+syncDayjsLocale();
+if (typeof window !== "undefined") {
+  window.addEventListener("et:locale", syncDayjsLocale);
+}
 
 export function formatTime(ts: number | null | undefined): string {
   if (!ts) return "-";
@@ -28,13 +37,13 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 export function formatDuration(seconds: number): string {
-  if (seconds <= 0) return "已过期";
+  if (seconds <= 0) return translate("duration.expired");
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d} 天 ${h} 小时`;
-  if (h > 0) return `${h} 小时 ${m} 分`;
-  return `${m} 分钟`;
+  if (d > 0) return translate("duration.daysHours", { d, h });
+  if (h > 0) return translate("duration.hoursMinutes", { h, m });
+  return translate("duration.minutes", { m });
 }
 
 export function secondsToUptime(seconds: number): string {
@@ -42,51 +51,51 @@ export function secondsToUptime(seconds: number): string {
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const parts: string[] = [];
-  if (d) parts.push(`${d}天`);
-  if (h) parts.push(`${h}时`);
-  parts.push(`${m}分`);
+  if (d) parts.push(translate("duration.daysShort", { d }));
+  if (h) parts.push(translate("duration.hoursShort", { h }));
+  parts.push(translate("duration.minutesShort", { m }));
   return parts.join(" ");
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  "auth.setup": "初始化管理员",
-  "auth.login": "登录",
-  "auth.login.failed": "登录失败",
-  "auth.change-password": "修改密码",
-  "user.create": "创建用户",
-  "user.update": "更新用户",
-  "user.delete": "删除用户",
-  "user.reset-password": "重置用户密码",
-  "network.create": "创建网络",
-  "network.update": "更新网络",
-  "network.delete": "删除网络",
-  "network.start": "启动网络",
-  "network.stop": "停止网络",
-  "network.restart": "重启网络",
-  "node.create": "创建节点",
-  "node.update": "更新节点",
-  "node.delete": "删除节点",
-  "node.view-join": "查看接入信息",
-  "node.rotate-credential": "更换节点凭据",
-  "credential.create": "签发临时凭据",
-  "credential.revoke": "撤销凭据",
-  "credential.delete": "删除凭据",
-  "system.update-settings": "更新系统设置",
+const ACTION_KEYS: Record<string, string> = {
+  "auth.setup": "action.authSetup",
+  "auth.login": "action.authLogin",
+  "auth.login.failed": "action.authLoginFailed",
+  "auth.change-password": "action.authChangePassword",
+  "user.create": "action.userCreate",
+  "user.update": "action.userUpdate",
+  "user.delete": "action.userDelete",
+  "user.reset-password": "action.userResetPassword",
+  "network.create": "action.networkCreate",
+  "network.update": "action.networkUpdate",
+  "network.delete": "action.networkDelete",
+  "network.start": "action.networkStart",
+  "network.stop": "action.networkStop",
+  "network.restart": "action.networkRestart",
+  "network.share": "action.networkShare",
+  "network.unshare": "action.networkUnshare",
+  "network.transfer": "action.networkTransfer",
+  "node.create": "action.nodeCreate",
+  "node.update": "action.nodeUpdate",
+  "node.delete": "action.nodeDelete",
+  "node.view-join": "action.nodeViewJoin",
+  "node.rotate-credential": "action.nodeRotateCredential",
+  "credential.create": "action.credentialCreate",
+  "credential.revoke": "action.credentialRevoke",
+  "credential.delete": "action.credentialDelete",
+  "system.update-settings": "action.systemUpdateSettings",
 };
 
 export function actionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action;
+  const key = ACTION_KEYS[action];
+  return key ? translate(key) : action;
 }
 
 export function networkStatusLabel(status: string): string {
-  switch (status) {
-    case "running":
-      return "运行中";
-    case "error":
-      return "异常";
-    default:
-      return "已停止";
+  if (status === "running" || status === "stopped" || status === "error") {
+    return translate(`status.network.${status}`);
   }
+  return status;
 }
 
 export function networkStatusType(status: string): "success" | "error" | "default" {
@@ -100,17 +109,18 @@ export function networkStatusType(status: string): "success" | "error" | "defaul
   }
 }
 
-export function credentialStatusLabel(status: string): string {
-  switch (status) {
-    case "active":
-      return "有效";
-    case "expired":
-      return "已过期";
-    case "revoked":
-      return "已撤销";
-    default:
-      return status;
+export function nodeStatusLabel(status: string): string {
+  if (status === "online" || status === "offline" || status === "unknown") {
+    return translate(`status.node.${status}`);
   }
+  return status;
+}
+
+export function credentialStatusLabel(status: string): string {
+  if (status === "active" || status === "expired" || status === "revoked") {
+    return translate(`status.credential.${status}`);
+  }
+  return status;
 }
 
 export function credentialStatusType(
@@ -133,14 +143,18 @@ export interface CostInfo {
   type: "success" | "warning" | "info" | "default";
 }
 
-/** 将 easytier-cli 的 cost 值转为可读标签：Local / p2p / relay(N) */
+/** Convert an easytier-cli cost value into a readable label: Local / p2p / relay(N) */
 export function costInfo(cost: string | null | undefined): CostInfo {
   if (!cost) return { text: "-", type: "default" };
-  if (cost === "Local") return { text: "本节点", type: "info" };
-  if (cost === "p2p") return { text: "直连", type: "success" };
+  if (cost === "Local") return { text: translate("cost.local"), type: "info" };
+  if (cost === "p2p") return { text: translate("cost.p2p"), type: "success" };
   const relay = cost.match(/^relay\((\d+)\)$/);
-  if (relay) return { text: `${relay[1]} 跳中继`, type: "warning" };
+  if (relay) return { text: translate("cost.relay", { n: relay[1] }), type: "warning" };
   return { text: cost, type: "default" };
+}
+
+export function secondsToDuration(seconds: number): string {
+  return formatDuration(seconds);
 }
 
 export function cloneDeep<T>(value: T): T {

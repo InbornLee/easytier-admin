@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { nodeApi } from "@/api";
 import { extractError } from "@/api/client";
 import { message } from "@/utils/feedback";
@@ -14,6 +15,8 @@ const emit = defineEmits<{
   (e: "update:show", value: boolean): void;
   (e: "rotated", payload: { node: NodeItem; credential: Credential; secret: string }): void;
 }>();
+
+const { t } = useI18n();
 
 const visible = computed({
   get: () => props.show,
@@ -30,14 +33,14 @@ const model = reactive({
   allowedProxyCidrs: [] as string[],
 });
 
-const ttlOptions = [
-  { label: "1 小时", value: 3600 },
-  { label: "1 天", value: 86400 },
-  { label: "7 天", value: 7 * 86400 },
-  { label: "30 天", value: 30 * 86400 },
-  { label: "90 天", value: 90 * 86400 },
-  { label: "365 天", value: 365 * 86400 },
-];
+const ttlOptions = computed(() => [
+  { label: t("nodes.ttl1Hour"), value: 3600 },
+  { label: t("nodes.ttl1Day"), value: 86400 },
+  { label: t("nodes.ttl7Days"), value: 7 * 86400 },
+  { label: t("nodes.ttl30Days"), value: 30 * 86400 },
+  { label: t("nodes.ttl90Days"), value: 90 * 86400 },
+  { label: t("nodes.ttl365Days"), value: 365 * 86400 },
+]);
 
 watch(
   () => props.show,
@@ -64,7 +67,7 @@ async function submit() {
       groups: model.groups,
       allowedProxyCidrs: model.allowedProxyCidrs,
     });
-    message.success("凭据已更换，请查看新的接入信息");
+    message.success(t("nodes.rotated"));
     emit("rotated", {
       node: result.node,
       credential: result.credential,
@@ -83,37 +86,39 @@ async function submit() {
   <n-modal
     v-model:show="visible"
     preset="card"
-    title="更换节点凭据"
+    :title="t('nodes.rotateTitle')"
     style="width: 600px; max-width: 94vw"
     :mask-closable="false"
   >
     <n-alert type="warning" :show-icon="true" class="mb">
-      更换后将<strong>立即撤销原凭据</strong>，使用原凭据的设备会掉线，需使用新凭据重新接入。
-      <template v-if="node">目标节点：<strong>{{ node.name }}</strong>。</template>
+      {{ t("nodes.rotateWarningPrefix") }}<strong>{{ t("nodes.rotateWarningStrong") }}</strong>{{ t("nodes.rotateWarningSuffix") }}
+      <template v-if="node">{{ t("nodes.targetNodePrefix") }}<strong>{{ node.name }}</strong>{{ t("nodes.targetNodeSuffix") }}</template>
     </n-alert>
     <n-form label-placement="top">
       <n-grid :cols="2" :x-gap="14">
-        <n-form-item-gi label="凭据有效期">
+        <n-form-item-gi :label="t('nodes.credentialTtl')">
           <n-select v-model:value="model.ttlSeconds" :options="ttlOptions" />
         </n-form-item-gi>
-        <n-form-item-gi label="允许中继流量">
+        <n-form-item-gi :label="t('nodes.allowRelay')">
           <n-switch v-model:value="model.allowRelay" />
         </n-form-item-gi>
-        <n-form-item-gi label="允许多设备复用">
+        <n-form-item-gi :label="t('nodes.reusable')">
           <n-switch v-model:value="model.reusable" />
         </n-form-item-gi>
-        <n-form-item-gi label="ACL 分组 (groups)">
+        <n-form-item-gi :label="t('nodes.aclGroups')">
           <n-dynamic-tags v-model:value="model.groups" size="small" />
         </n-form-item-gi>
       </n-grid>
-      <n-form-item label="允许代理的网段 (allowed proxy cidrs)">
+      <n-form-item :label="t('nodes.allowedCidrs')">
         <n-dynamic-tags v-model:value="model.allowedProxyCidrs" size="small" />
       </n-form-item>
     </n-form>
     <template #footer>
       <div class="modal-footer">
-        <n-button @click="visible = false">取消</n-button>
-        <n-button type="warning" :loading="submitting" @click="submit">确认更换</n-button>
+        <n-button @click="visible = false">{{ t("common.cancel") }}</n-button>
+        <n-button type="warning" :loading="submitting" @click="submit">
+          {{ t("nodes.confirmRotate") }}
+        </n-button>
       </div>
     </template>
   </n-modal>

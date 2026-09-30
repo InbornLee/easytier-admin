@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import type { DataTableColumns } from "naive-ui";
 import { RefreshOutline, TrashOutline, SearchOutline } from "@vicons/ionicons5";
 import LogViewer, { type LogLine } from "@/components/LogViewer.vue";
@@ -9,6 +10,8 @@ import { message, dialog } from "@/utils/feedback";
 import { actionLabel, formatTime } from "@/utils/format";
 import { useLogStream } from "@/composables/useLogStream";
 import type { AuditLog, Network, NodeLog } from "@/types";
+
+const { t } = useI18n();
 
 const activeTab = ref("audit");
 
@@ -37,12 +40,17 @@ async function loadAudit() {
   }
 }
 
-const auditColumns: DataTableColumns<AuditLog> = [
-  { title: "时间", key: "createdAt", width: 175, render: (r) => formatTime(r.createdAt) },
-  { title: "操作者", key: "username", width: 130, render: (r) => r.username ?? "系统" },
-  { title: "操作", key: "action", width: 170, render: (r) => actionLabel(r.action) },
+const auditColumns = computed<DataTableColumns<AuditLog>>(() => [
+  { title: t("logs.time"), key: "createdAt", width: 175, render: (r) => formatTime(r.createdAt) },
   {
-    title: "对象",
+    title: t("logs.operator"),
+    key: "username",
+    width: 130,
+    render: (r) => r.username ?? t("common.system"),
+  },
+  { title: t("logs.action"), key: "action", width: 170, render: (r) => actionLabel(r.action) },
+  {
+    title: t("logs.target"),
     key: "resource",
     width: 180,
     render: (r) =>
@@ -50,11 +58,11 @@ const auditColumns: DataTableColumns<AuditLog> = [
   },
   { title: "IP", key: "ip", width: 140, render: (r) => r.ip ?? "-" },
   {
-    title: "详情",
+    title: t("logs.detail"),
     key: "detail",
     render: (r) => (r.detail ? h("span", { class: "mono detail" }, JSON.stringify(r.detail)) : "-"),
   },
-];
+]);
 
 // ---------------- 节点日志 ----------------
 const networks = ref<Network[]>([]);
@@ -98,10 +106,10 @@ const liveFiltered = computed<LogLine[]>(() => {
   return lines;
 });
 
-const logColumns: DataTableColumns<NodeLog> = [
-  { title: "时间", key: "createdAt", width: 175, render: (r) => formatTime(r.createdAt) },
+const logColumns = computed<DataTableColumns<NodeLog>>(() => [
+  { title: t("logs.time"), key: "createdAt", width: 175, render: (r) => formatTime(r.createdAt) },
   {
-    title: "级别",
+    title: t("logs.level"),
     key: "level",
     width: 90,
     render: (r) =>
@@ -111,24 +119,31 @@ const logColumns: DataTableColumns<NodeLog> = [
         r.level.toUpperCase(),
       ),
   },
-  { title: "网络", key: "networkId", width: 120, render: (r) => r.networkId?.slice(0, 10) ?? "-" },
   {
-    title: "日志内容",
+    title: t("logs.network"),
+    key: "networkId",
+    width: 120,
+    render: (r) => r.networkId?.slice(0, 10) ?? "-",
+  },
+  {
+    title: t("logs.message"),
     key: "message",
     render: (r) => h("span", { class: "mono", style: "white-space: pre-wrap" }, r.message),
   },
-];
+]);
 
 function clearLogs() {
   dialog.warning({
-    title: "清空节点日志",
-    content: logNetworkId.value ? "确定清空当前网络的运行日志？" : "确定清空全部节点运行日志？",
-    positiveText: "清空",
-    negativeText: "取消",
+    title: t("logs.clearTitle"),
+    content: logNetworkId.value
+      ? t("logs.clearConfirmCurrent")
+      : t("logs.clearConfirmAll"),
+    positiveText: t("logs.clear"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await logApi.clearNodes(logNetworkId.value);
-        message.success("已清空");
+        message.success(t("logs.cleared"));
         await loadNodeLogs();
       } catch (err) {
         message.error(extractError(err));
@@ -137,14 +152,14 @@ function clearLogs() {
   });
 }
 
-const levelOptions = [
-  { label: "全部级别", value: "" },
+const levelOptions = computed(() => [
+  { label: t("logs.allLevels"), value: "" },
   { label: "TRACE", value: "trace" },
   { label: "DEBUG", value: "debug" },
   { label: "INFO", value: "info" },
   { label: "WARN", value: "warn" },
   { label: "ERROR", value: "error" },
-];
+]);
 
 watch([logNetworkId, logLevel, logSearch], () => {
   logPage.value = 1;
@@ -166,19 +181,19 @@ onMounted(async () => {
   <div class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">日志中心</h1>
-        <div class="page-subtitle">控制台操作审计与 EasyTier 节点运行日志</div>
+        <h1 class="page-title">{{ t("logs.title") }}</h1>
+        <div class="page-subtitle">{{ t("logs.subtitle") }}</div>
       </div>
     </div>
 
     <n-card size="small">
       <n-tabs v-model:value="activeTab" type="line" animated>
         <!-- 审计日志 -->
-        <n-tab-pane name="audit" tab="控制台操作日志">
+        <n-tab-pane name="audit" :tab="t('logs.tabAudit')">
           <div class="toolbar">
             <n-input
               v-model:value="auditSearch"
-              placeholder="搜索操作 / 对象 / 详情"
+              :placeholder="t('logs.searchAudit')"
               size="small"
               clearable
               style="width: 260px"
@@ -186,10 +201,12 @@ onMounted(async () => {
             >
               <template #prefix><n-icon :component="SearchOutline" /></template>
             </n-input>
-            <n-button size="small" type="primary" @click="loadAudit">查询</n-button>
+            <n-button size="small" type="primary" @click="loadAudit">{{
+              t("logs.query")
+            }}</n-button>
             <n-button size="small" @click="loadAudit">
               <template #icon><n-icon :component="RefreshOutline" /></template>
-              刷新
+              {{ t("common.refresh") }}
             </n-button>
           </div>
           <n-data-table
@@ -214,12 +231,12 @@ onMounted(async () => {
         </n-tab-pane>
 
         <!-- 节点运行日志 -->
-        <n-tab-pane name="runtime" tab="节点运行日志">
+        <n-tab-pane name="runtime" :tab="t('logs.tabRuntime')">
           <div class="toolbar">
             <n-select
               v-model:value="logNetworkId"
               :options="networks.map((n) => ({ label: n.name, value: n.id }))"
-              placeholder="全部网络"
+              :placeholder="t('logs.allNetworks')"
               clearable
               size="small"
               style="width: 170px"
@@ -227,14 +244,14 @@ onMounted(async () => {
             <n-select
               v-model:value="logLevel"
               :options="levelOptions"
-              placeholder="全部级别"
+              :placeholder="t('logs.allLevels')"
               clearable
               size="small"
               style="width: 130px"
             />
             <n-input
               v-model:value="logSearch"
-              placeholder="搜索日志内容"
+              :placeholder="t('logs.searchLog')"
               size="small"
               clearable
               style="width: 220px"
@@ -243,11 +260,11 @@ onMounted(async () => {
             </n-input>
             <div class="spacer" />
             <n-tag :type="connected ? 'success' : 'default'" size="small" :bordered="false">
-              {{ connected ? "实时流已连接" : "实时流未连接" }}
+              {{ connected ? t("logs.streamConnected") : t("logs.streamDisconnected") }}
             </n-tag>
             <n-switch v-model:value="liveOn" size="small">
-              <template #checked>实时</template>
-              <template #unchecked>历史</template>
+              <template #checked>{{ t("logs.live") }}</template>
+              <template #unchecked>{{ t("logs.history") }}</template>
             </n-switch>
             <n-button size="small" @click="loadNodeLogs">
               <template #icon><n-icon :component="RefreshOutline" /></template>
