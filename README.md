@@ -289,4 +289,6 @@ easytier-core -c config.toml --credential <凭据密钥>
 
 ## 许可证
 
+本项目基于 [MIT 许可证](./LICENSE) 开源。
+
 本项目仅用于管理 EasyTier，EasyTier 本身遵循其仓库许可证。

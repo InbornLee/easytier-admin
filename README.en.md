@@ -291,4 +291,6 @@ The console's "Configuration file" tab already includes this hint and a copyable
 
 ## License
 
+This project is released under the [MIT License](./LICENSE).
+
 This project is only used to manage EasyTier; EasyTier itself is licensed under its own repository's license.
