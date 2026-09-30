@@ -12,6 +12,14 @@
 
 ---
 
+## 界面预览
+
+| 概览 | 网络管理 |
+| --- | --- |
+| ![概览](./docs/screenshots/dashboard.png) | ![网络管理](./docs/screenshots/networks.png) |
+
+---
+
 ## 功能特性
 
 | 模块 | 说明 |

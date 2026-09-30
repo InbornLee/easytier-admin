@@ -12,6 +12,14 @@ A visual network and node management console built on the official [EasyTier](ht
 
 ---
 
+## Screenshots
+
+| Dashboard | Networks |
+| --- | --- |
+| ![Dashboard](./docs/screenshots/dashboard.png) | ![Networks](./docs/screenshots/networks.png) |
+
+---
+
 ## Features
 
 | Module | Description |
