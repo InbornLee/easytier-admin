@@ -1,0 +1,42 @@
+services:
+  easytier-admin:
+    build:
+      context: .
+      args:
+        # 国内镜像加速
+        NODE_IMAGE: m.daocloud.io/docker.io/node:24-slim
+        EASYTIER_IMAGE: m.daocloud.io/docker.io/easytier/easytier:latest
+    image: easytier-admin:latest
+    container_name: easytier-admin
+    restart: unless-stopped
+    # 使用内置 init 进程转发信号
+    init: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      # 控制台 Web 端口（宿主机端口可通过 WEB_PORT 调整，容器内始终为 11211）
+      - "${WEB_PORT:-11211}:11211"
+      # EasyTier 共享节点监听端口（tcp/udp），需与 EASYTIER_LISTEN_PORT_START 对应
+      # 11010 在部分环境可能被占用，此处从 11011 开始
+      - "11011-11029:11011-11029/tcp"
+      - "11011-11029:11011-11029/udp"
+    environment:
+      - TZ=Asia/Shanghai
+      - PORT=11211
+      - DATA_DIR=/data
+      # 生产环境请固定 APP_SECRET，用于 JWT 与敏感字段加密
+      - APP_SECRET=${APP_SECRET:-}
+      - EASYTIER_DEFAULT_EXTERNAL_NODE=${EASYTIER_DEFAULT_EXTERNAL_NODE:-tcp://public.easytier.cn:11010}
+      - EASYTIER_RPC_PORT_START=${EASYTIER_RPC_PORT_START:-15888}
+      - EASYTIER_LISTEN_PORT_START=${EASYTIER_LISTEN_PORT_START:-11010}
+    volumes:
+      - ./data:/data
+
+# 说明：
+# - 生产部署在 Linux 宿主机上时，为获得最佳 NAT 穿透 / P2P 效果，可将本服务改为
+#   network_mode: host（并移除 ports 段），此时共享节点可直接使用宿主机端口。
+# - 在 Docker Desktop（Windows/macOS）下，host 网络无法正向映射到 WSL/宿主 localhost，
+#   因此默认使用 bridge + 端口映射，通过 http://localhost:11211 访问控制台。

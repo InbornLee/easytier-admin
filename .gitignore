@@ -1,0 +1,37 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+target/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# 环境变量与密钥（真实配置绝不入库，仅保留 *.example）
+.env
+.env.*
+!.env.example
+!.env.deploy.example
+
+# 运行时数据（数据库、凭据、日志、自动生成的密钥）
+data/
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+.app_secret
+
+# 密钥/证书
+*.pem
+*.key
+*.p12
+*.pfx
+
+# 日志与系统文件
+*.log
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

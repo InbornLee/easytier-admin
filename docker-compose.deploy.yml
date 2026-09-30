@@ -1,0 +1,78 @@
+# 在目标机部署 EasyTier 控制台（直接使用 Harbor 镜像，无需构建）
+#
+# 使用方式：
+#   1) 配置好 Harbor 证书或 insecure-registries（见文件末尾说明），并 docker login
+#   2) （可选）复制 .env.deploy.example 为 .env 并修改
+#   3) docker compose -f docker-compose.deploy.yml up -d
+#
+# 说明：
+# - 镜像内置 easytier-core / easytier-cli（静态链接）与前端资源，开箱即用。
+# - 默认使用 bridge 网络 + 端口映射；Linux 宿主机生产环境建议改用 host 网络（见末尾注释）。
+
+services:
+  easytier-admin:
+    # 镜像仓库地址通过环境变量配置（可在 .env 中设置 ADMIN_IMAGE），避免硬编码私有仓库
+    image: ${ADMIN_IMAGE:-easytier-admin:latest}
+    container_name: easytier-admin
+    pull_policy: always
+    restart: unless-stopped
+    # 使用内置 init 进程转发信号
+    init: true
+
+    # EasyTier 需要创建 TUN 设备并配置网络
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    ports:
+      # 控制台 Web 端口（容器内固定 11211）
+      - "${WEB_PORT:-11211}:11211"
+      # EasyTier 共享节点监听端口范围
+      # 必须与 EASYTIER_LISTEN_PORT_START 对应（默认从 11011 开始）
+      - "${LISTEN_PORT_START:-11011}-${LISTEN_PORT_END:-11029}:${LISTEN_PORT_START:-11011}-${LISTEN_PORT_END:-11029}/tcp"
+      - "${LISTEN_PORT_START:-11011}-${LISTEN_PORT_END:-11029}:${LISTEN_PORT_START:-11011}-${LISTEN_PORT_END:-11029}/udp"
+
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - PORT=11211
+      - DATA_DIR=/data
+      # 生产环境务必固定 APP_SECRET（JWT 签名 + 敏感字段加密）；留空会自动生成并持久化到 /data/.app_secret
+      - APP_SECRET=${APP_SECRET:-}
+      # 全局默认公共共享节点（可留空，仅在网络未配置初始 Peer 时作为兜底）
+      - EASYTIER_DEFAULT_EXTERNAL_NODE=${EASYTIER_DEFAULT_EXTERNAL_NODE:-tcp://public.easytier.cn:11010}
+      # 每个网络实例占用的端口区间
+      - EASYTIER_RPC_PORT_START=${EASYTIER_RPC_PORT_START:-15888}
+      - EASYTIER_LISTEN_PORT_START=${LISTEN_PORT_START:-11011}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # 若经 HTTPS 反向代理访问，设为 true（Cookie 加 Secure）
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+
+    # 镜像自带 HEALTHCHECK；此处不再重复定义
+
+# ============================================================
+# 一、私有 Harbor 为自签名 HTTPS 时，目标机可选其一（将 <harbor-host>:<port> 替换为实际地址）：
+#
+#   A) 将 Harbor CA 证书放到 Docker 信任目录：
+#      sudo mkdir -p /etc/docker/certs.d/<harbor-host>:<port>
+#      sudo cp harbor-ca.crt /etc/docker/certs.d/<harbor-host>:<port>/ca.crt
+#
+#   B) 或将 registry 加入 insecure-registries（/etc/docker/daemon.json）：
+#      {
+#        "insecure-registries": ["<harbor-host>:<port>"]
+#      }
+#      然后：sudo systemctl restart docker
+#
+#   登录（若项目非公开）：
+#      docker login <harbor-host>:<port> -u <用户名>
+#
+# 二、Linux 宿主机生产部署（获得最佳 NAT 穿透 / P2P 效果）：
+#   将上面的 ports 段删除，并加入：
+#      network_mode: host
+#   此时控制台直接监听宿主机 11211，EasyTier 直接使用宿主机端口。
+#
+# 三、数据持久化目录 DATA_DIR 默认为当前目录下的 ./data，可改为绝对路径。
+# ============================================================

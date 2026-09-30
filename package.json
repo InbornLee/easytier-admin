@@ -1,0 +1,20 @@
+{
+  "name": "easytier-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EasyTier 控制台 — 基于 easytier-core / easytier-cli 的网络与节点管理平台",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c cyan,magenta \"cargo run --manifest-path backend/Cargo.toml\" \"pnpm -C frontend dev\"",
+    "build": "pnpm -C frontend build && cargo build --manifest-path backend/Cargo.toml --release",
+    "build:backend": "cargo build --manifest-path backend/Cargo.toml --release",
+    "start": "backend/target/release/easytier-admin",
+    "typecheck": "pnpm -C frontend typecheck && cargo check --manifest-path backend/Cargo.toml"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
