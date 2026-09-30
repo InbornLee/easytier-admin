@@ -1,5 +1,7 @@
 # EasyTier 控制台（easytier-admin）
 
+[简体中文](./README.md) | [English](./README.en.md)
+
 基于官方 [EasyTier](https://easytier.cn/guide/introduction.html) 的 **`easytier-core` / `easytier-cli`** 构建的可视化网络与节点管理控制台。
 
 - **前端**：Vue 3 + Vite + TypeScript + Naive UI + Pinia + Vue Router + Vue Flow + ECharts
@@ -19,9 +21,10 @@
 | 节点管理 | 新建客户端节点并自动签发凭据；自动分配虚拟 IP；节点在线状态、延迟、流量、NAT 类型；一键接入命令 / config.toml / 二维码 |
 | 连接拓扑 | 基于实时 peer 数据渲染节点连接图（Vue Flow），区分直连/中继、在线/离线 |
 | 凭据管理 | 通过 `easytier-cli credential` 签发/列举/撤销临时凭据，支持 TTL、ACL 分组、是否允许中继、允许代理网段、是否可复用 |
+| 多用户与分享 | 网络归属于创建者；非管理员仅能看到自己创建或被分享的网络（管理员可见全部）；可将网络以「只读 / 可管理」分享给其他用户；支持归属转移 |
 | 日志中心 | 控制台操作审计日志；`easytier-core` 运行日志实时 SSE 推送 + 历史落库检索 |
 | 仪表盘 | 网络/节点/凭据统计，全局流量曲线（每 30s 采样），最近操作与错误日志 |
-| 系统设置 | `easytier-core`/`easytier-cli` 路径、默认公共共享节点、端口范围；二进制可用性检测 |
+| 系统设置 | `easytier-core`/`easytier-cli` 路径、默认公共共享节点、端口范围、日志储存期限；二进制可用性检测 |
 
 ---
 
@@ -172,10 +175,14 @@ easytier-core -d \
 | GET | `/api/users` | 用户列表（管理员） |
 | POST/PATCH/DELETE | `/api/users[/:id]` | 用户增改删（管理员） |
 | POST | `/api/users/:id/reset-password` | 重置密码（管理员） |
+| GET | `/api/users/selectable` | 分享可选用户列表 |
 | GET/POST | `/api/networks` | 网络列表/创建 |
 | GET/PATCH/DELETE | `/api/networks/:id` | 网络详情/更新/删除 |
 | POST | `/api/networks/:id/{start,stop,restart}` | 启停/重启 |
 | GET | `/api/networks/:id/{config,live,topology,peers,routes,logs,credentials,nodes}` | 网络运行信息 |
+| GET/POST | `/api/networks/:id/shares` | 分享列表/新增分享（所有者或管理员） |
+| DELETE | `/api/networks/:id/shares/:userId` | 取消分享 |
+| POST | `/api/networks/:id/transfer` | 转移网络归属 |
 | GET/POST | `/api/nodes` | 节点列表/创建（创建时自动签发凭据） |
 | GET/PATCH/DELETE | `/api/nodes/:id` | 节点详情/更新/删除 |
 | GET | `/api/nodes/:id/join` | 接入命令 / 配置 / 二维码数据 |
@@ -188,7 +195,7 @@ easytier-core -d \
 | GET | `/api/logs/stream` | 实时日志流（SSE） |
 | DELETE | `/api/logs/nodes` | 清空节点日志 |
 | GET | `/api/dashboard/{summary,traffic}` | 概览统计/流量曲线 |
-| GET/PUT | `/api/system/settings` | EasyTier 运行参数（管理员） |
+| GET/PUT | `/api/system/settings` | EasyTier 运行参数与日志储存期限（管理员） |
 | GET | `/api/system/{info,binaries}` | 系统信息/二进制检测 |
 
 ---
