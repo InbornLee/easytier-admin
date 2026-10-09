@@ -292,8 +292,8 @@ impl Cli {
             }
         }
         if allow_relay {
+            // --allow-relay 是布尔标志，不接受值
             args.push("--allow-relay".to_string());
-            args.push("true".to_string());
         }
         if let Some(cidrs) = allowed_proxy_cidrs {
             if !cidrs.is_empty() {
