@@ -13,7 +13,7 @@ use crate::easytier::types::{NodeInfo, PeerListItem, RouteListItem};
 use crate::error::{bad_request, conflict, forbidden, not_found, AppResult};
 use crate::middleware::AuthUser;
 use crate::state::AppState;
-use crate::util::crypto::random_token;
+use crate::util::crypto::{derive_network_secret, random_token};
 use crate::util::format::parse_human_size;
 use crate::util::now_ms;
 use crate::util::x25519::{derive_key_pair, derive_public_key};
@@ -71,7 +71,8 @@ pub fn to_public_network(state: &AppState, row: &NetworkRow, access: AccessLevel
         listen_port: row.listen_port,
         rpc_port: row.rpc_port,
         secure_mode: row.secure_mode,
-        shared_node_public_key: if private_key.is_empty() {
+        // 仅在安全模式下对外暴露共享节点公钥（供客户端 [[peer]] peer_public_key 锁定）。
+        shared_node_public_key: if !row.secure_mode || private_key.is_empty() {
             String::new()
         } else {
             derive_public_key(&private_key)
@@ -404,9 +405,14 @@ fn resolve_listeners(listeners: Vec<String>, listen_port: i64) -> Vec<String> {
 
 pub fn write_network_config(state: &AppState, row: &NetworkRow) -> AppResult<PathBuf> {
     let network_secret = state.crypto.try_decrypt(Some(&row.network_secret_enc));
-    let local_private_key = state
-        .crypto
-        .try_decrypt(row.local_private_key_enc.as_deref());
+    // 仅当安全模式开启时才落盘 / 输出私钥，避免关闭安全模式后配置里仍带 [secure_mode]。
+    let local_private_key = if row.secure_mode {
+        state
+            .crypto
+            .try_decrypt(row.local_private_key_enc.as_deref())
+    } else {
+        String::new()
+    };
 
     let mut peers = safe_string_array(&row.peers);
     if let Some(external) = row.external_node.as_deref() {
@@ -443,12 +449,14 @@ pub fn write_network_config(state: &AppState, row: &NetworkRow) -> AppResult<Pat
         peers,
         proxy_networks: Vec::new(),
         credential_file: Some(credential_file),
+        secure_mode: row.secure_mode,
         local_private_key: if local_private_key.is_empty() {
             None
         } else {
             Some(local_private_key)
         },
         local_public_key: None,
+        peer_public_key: None,
         flags: safe_object(&row.flags),
     };
 
@@ -532,11 +540,22 @@ pub async fn create_network(
     } else {
         None
     };
-    let network_secret = input
+    // 安全模式要求显式设置 network_secret；用户输入经 Argon2id 派生后才作为真正的
+    // network_secret 落库与写入配置（明文不落库）。未开启安全模式且留空时自动生成。
+    let raw_secret = input
         .network_secret
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| random_token(24));
+        .filter(|s| !s.is_empty());
+    let network_secret = match raw_secret {
+        Some(raw) => derive_network_secret(raw).await?,
+        None if secure_mode => {
+            return Err(bad_request(
+                "开启安全模式时必须设置网络密钥 (network_secret)",
+                None,
+            ));
+        }
+        None => random_token(24),
+    };
     let id = random_token(9);
     let ts = now_ms();
     let settings = state.easytier_settings();
@@ -624,8 +643,11 @@ pub async fn update_network(
         row.network_name = v.trim().to_string();
     }
     if let Some(v) = input.network_secret {
+        let v = v.trim();
         if !v.is_empty() {
-            row.network_secret_enc = state.crypto.encrypt(&v);
+            // 重新输入密钥时重新派生，避免明文入库。
+            let derived = derive_network_secret(v.to_string()).await?;
+            row.network_secret_enc = state.crypto.encrypt(&derived);
         }
     }
     if let Some(v) = input.ipv4 {

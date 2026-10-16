@@ -1,10 +1,13 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
+use argon2::{Algorithm, Argon2, Params, Version};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use rand::RngCore;
-use scrypt::{scrypt, Params};
+use scrypt::{scrypt, Params as ScryptParams};
 use sha2::{Digest, Sha256};
+
+use crate::error::{internal, AppResult};
 
 const SCRYPT_SALT: &[u8] = b"easytier-admin::field-encryption";
 const TAG_LEN: usize = 16;
@@ -21,7 +24,7 @@ pub struct Crypto {
 impl Crypto {
     pub fn new(app_secret: &str) -> Self {
         let mut key = [0u8; 32];
-        let params = Params::new(14, 8, 1, 32).expect("valid scrypt params");
+        let params = ScryptParams::new(14, 8, 1, 32).expect("valid scrypt params");
         scrypt(app_secret.as_bytes(), SCRYPT_SALT, &params, &mut key)
             .expect("scrypt derivation failed");
         Self { key }
@@ -87,4 +90,54 @@ pub fn random_token(bytes: usize) -> String {
     let mut buf = vec![0u8; bytes];
     rand::rngs::OsRng.fill_bytes(&mut buf);
     URL_SAFE_NO_PAD.encode(buf)
+}
+
+/// 将用户输入的网络密钥（network_secret）做强加密转换（KDF 派生）。
+///
+/// 使用 Argon2id（64 MiB / 3 次迭代）+ 随机盐派生出 32 字节结果并做 URL-safe base64。
+/// 返回的派生值才是真正的 EasyTier `network_secret`；**用户输入的明文不落库、不落配置**。
+pub async fn derive_network_secret(input: String) -> AppResult<String> {
+    tokio::task::spawn_blocking(move || {
+        let params = Params::new(65536, 3, 1, Some(32))
+            .map_err(|e| internal(format!("Argon2 参数无效: {e}")))?;
+        let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+        let mut salt = [0u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut salt);
+        let mut out = [0u8; 32];
+        argon
+            .hash_password_into(input.as_bytes(), &salt, &mut out)
+            .map_err(|e| internal(format!("network_secret 派生失败: {e}")))?;
+        Ok(URL_SAFE_NO_PAD.encode(out))
+    })
+    .await
+    .map_err(|e| internal(format!("network_secret 派生任务失败: {e}")))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypt_roundtrip() {
+        let crypto = Crypto::new("test-secret");
+        let enc = crypto.encrypt("hello");
+        assert_ne!(enc, "hello");
+        assert_eq!(crypto.decrypt(&enc).unwrap(), "hello");
+    }
+
+    #[tokio::test]
+    async fn network_secret_derivation_is_not_plaintext() {
+        let derived = derive_network_secret("MyWeakPassphrase".to_string())
+            .await
+            .unwrap();
+        // 派生值 ≠ 用户明文，且为固定长度的 URL-safe base64（32 字节）。
+        assert_ne!(derived, "MyWeakPassphrase");
+        assert!(!derived.contains("MyWeakPassphrase"));
+        assert_eq!(derived.len(), 43);
+        // 随机盐：同一输入两次派生结果不同。
+        let again = derive_network_secret("MyWeakPassphrase".to_string())
+            .await
+            .unwrap();
+        assert_ne!(derived, again);
+    }
 }

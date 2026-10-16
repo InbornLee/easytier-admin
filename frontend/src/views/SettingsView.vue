@@ -468,7 +468,7 @@ onMounted(async () => {
         <!-- 关于 -->
         <n-tab-pane name="about" :tab="t('settings.tabAbout')">
           <n-descriptions :column="1" size="small" bordered style="max-width: 720px">
-            <n-descriptions-item :label="t('settings.consoleVersion')">v{{ info?.version ?? "1.0.0" }}</n-descriptions-item>
+            <n-descriptions-item :label="t('settings.consoleVersion')">v{{ info?.version ?? "1.0.2" }}</n-descriptions-item>
             <n-descriptions-item :label="t('settings.backendRuntime')">{{ info?.node ?? "-" }}</n-descriptions-item>
             <n-descriptions-item :label="t('settings.platform')">{{ info?.platform ?? "-" }}</n-descriptions-item>
             <n-descriptions-item :label="t('settings.uptime')">

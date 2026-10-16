@@ -25,6 +25,30 @@ pub fn default_flags() -> Vec<(&'static str, Value)> {
         ("disable_udp_hole_punching", json!(false)),
         ("disable_tcp_hole_punching", json!(false)),
         ("private_mode", json!(false)),
+        // 客户端节点高级设置（对照官方配置助手 FlagsInConfig 的 localName/默认值）。
+        ("bind_device", json!(false)),
+        ("encryption_algorithm", json!("")),
+        ("multi_thread", json!(false)),
+        ("multi_thread_count", json!(0)),
+        ("p2p_only", json!(false)),
+        ("lazy_p2p", json!(false)),
+        ("need_p2p", json!(true)),
+        ("disable_sym_hole_punching", json!(false)),
+        ("disable_upnp", json!(false)),
+        ("enable_kcp_proxy", json!(false)),
+        ("disable_kcp_input", json!(false)),
+        ("disable_relay_kcp", json!(false)),
+        ("enable_quic_proxy", json!(false)),
+        ("disable_quic_input", json!(false)),
+        ("disable_relay_quic", json!(false)),
+        ("quic_listen_port", json!(0)),
+        ("proxy_forward_by_system", json!(false)),
+        ("accept_dns", json!(false)),
+        ("tld_dns_zone", json!("")),
+        ("enable_udp_broadcast_relay", json!(false)),
+        ("disable_relay_data", json!(false)),
+        ("foreign_relay_bps_limit", json!(0)),
+        ("instance_recv_bps_limit", json!(0)),
     ]
 }
 
@@ -99,11 +123,18 @@ pub struct NetworkTomlInput {
     pub listeners: Vec<String>,
     pub mapped_listeners: Vec<String>,
     pub exit_nodes: Vec<String>,
+    /// 初始 Peer 列表；第一个 Peer 可附带 `peer_public_key` 公钥锁定。
     pub peers: Vec<String>,
     pub proxy_networks: Vec<String>,
     pub credential_file: Option<String>,
+    /// 安全模式开关。开启后输出 `[secure_mode] enabled = true`。
+    pub secure_mode: bool,
+    /// 本地固定私钥（base64）。共享节点应显式指定，避免重启后公钥变化。
     pub local_private_key: Option<String>,
+    /// 本地固定公钥（base64）。通常留空由私钥自动派生并写入（兼容 EasyTier 2.6.x）。
     pub local_public_key: Option<String>,
+    /// 锁定第一个 Peer 的公钥（base64），对应官方 `[[peer]] peer_public_key`。
+    pub peer_public_key: Option<String>,
     pub flags: Map<String, Value>,
 }
 
@@ -186,29 +217,51 @@ pub fn build_network_toml(input: &NetworkTomlInput) -> String {
         }
     }
 
-    if let Some(private_key) = input.local_private_key.as_deref() {
-        if !private_key.is_empty() {
-            lines.push(String::new());
-            lines.push("[secure_mode]".to_string());
-            lines.push("enabled = true".to_string());
-            lines.push(format!("local_private_key = {}", toml_string(private_key)));
-            let public_key = match input.local_public_key.as_deref() {
-                Some(k) if !k.is_empty() => k.to_string(),
-                _ => derive_public_key(private_key),
-            };
-            if !public_key.is_empty() {
-                lines.push(format!("local_public_key = {}", toml_string(&public_key)));
+    // 安全模式：`enabled = true` 与密钥对互相独立。
+    // 共享节点 / 固定节点需要固定 `local_private_key`（否则重启后公钥变化导致客户端锁定失效）；
+    // 临时凭据节点只需 `enabled = true`，凭据本身通过命令行 `--credential` 传入。
+    //
+    // 重要：必须同时写出 `local_public_key`（由私钥派生）。EasyTier 2.6.x 的
+    // `SecureModeConfig::public_key()` 在 `local_public_key` 缺失时会报
+    // "local public key is not set"（由私钥自动派生的 `normalize_secure_mode_config`
+    // 是后续版本才加入的）。显式写出对新旧版本都兼容。
+    if input.secure_mode {
+        lines.push(String::new());
+        lines.push("[secure_mode]".to_string());
+        lines.push("enabled = true".to_string());
+        if let Some(private_key) = input.local_private_key.as_deref() {
+            if !private_key.is_empty() {
+                lines.push(format!("local_private_key = {}", toml_string(private_key)));
+                let public_key = input
+                    .local_public_key
+                    .as_deref()
+                    .filter(|k| !k.is_empty())
+                    .map(|k| k.to_string())
+                    .unwrap_or_else(|| derive_public_key(private_key));
+                if !public_key.is_empty() {
+                    lines.push(format!("local_public_key = {}", toml_string(&public_key)));
+                }
             }
         }
     }
 
-    for peer in input.peers.iter() {
-        if peer.trim().is_empty() {
-            continue;
-        }
+    let peers: Vec<String> = input
+        .peers
+        .iter()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+    for (index, peer) in peers.iter().enumerate() {
         lines.push(String::new());
         lines.push("[[peer]]".to_string());
-        lines.push(format!("uri = {}", toml_string(peer.trim())));
+        lines.push(format!("uri = {}", toml_string(peer)));
+        if index == 0 {
+            if let Some(public_key) = input.peer_public_key.as_deref() {
+                if !public_key.is_empty() {
+                    lines.push(format!("peer_public_key = {}", toml_string(public_key)));
+                }
+            }
+        }
     }
 
     // flags：仅输出与默认值不同的项
@@ -240,7 +293,12 @@ pub fn build_network_toml(input: &NetworkTomlInput) -> String {
 
 pub struct JoinCommandParams<'a> {
     pub network_name: &'a str,
-    pub credential_secret: &'a str,
+    /// 临时节点：凭据密钥（`--credential`）。
+    pub credential_secret: Option<&'a str>,
+    /// 固定节点：网络密钥（`--network-secret`）。
+    pub network_secret: Option<&'a str>,
+    /// 固定节点：本节点持久化静态私钥（`--local-private-key`）。
+    pub local_private_key: Option<&'a str>,
     pub peer: &'a str,
     pub ipv4: Option<&'a str>,
     pub hostname: Option<&'a str>,
@@ -248,7 +306,10 @@ pub struct JoinCommandParams<'a> {
     pub listeners: Vec<String>,
 }
 
-/// 生成客户端节点加入命令（用于凭据接入）
+/// 生成客户端节点加入命令。
+///
+/// - 固定节点：`--network-secret <派生密钥> --secure-mode`（无 `--credential`）
+/// - 临时节点：`--credential <凭据密钥> --secure-mode`（无 `network_secret`）
 pub fn build_join_command(params: &JoinCommandParams<'_>) -> String {
     let listeners: Vec<String> = if !params.listeners.is_empty() {
         params
@@ -277,13 +338,172 @@ pub fn build_join_command(params: &JoinCommandParams<'_>) -> String {
         shell_quote(params.network_name)
     ));
     parts.push("--secure-mode".to_string());
-    parts.push(format!(
-        "--credential {}",
-        shell_quote(params.credential_secret)
-    ));
+    if let Some(secret) = params.credential_secret {
+        parts.push(format!("--credential {}", shell_quote(secret)));
+    }
+    if let Some(secret) = params.network_secret {
+        parts.push(format!("--network-secret {}", shell_quote(secret)));
+    }
+    if let Some(key) = params.local_private_key {
+        parts.push(format!("--local-private-key {}", shell_quote(key)));
+    }
     for listener in listeners {
         parts.push(format!("-l {}", shell_quote(&listener)));
     }
     parts.push(format!("-p {}", shell_quote(params.peer)));
     parts.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_input() -> NetworkTomlInput {
+        NetworkTomlInput {
+            instance_name: "net-abc".to_string(),
+            hostname: "host".to_string(),
+            network_name: "office".to_string(),
+            network_secret: Some("secret".to_string()),
+            ipv4: Some("10.126.126.1/24".to_string()),
+            dhcp: false,
+            listeners: vec!["tcp://0.0.0.0:11010".to_string()],
+            mapped_listeners: vec![],
+            exit_nodes: vec![],
+            peers: vec![],
+            proxy_networks: vec![],
+            credential_file: Some("/tmp/credentials.json".to_string()),
+            secure_mode: true,
+            local_private_key: None,
+            local_public_key: None,
+            peer_public_key: None,
+            flags: Map::new(),
+        }
+    }
+
+    /// 场景二（共享节点/固定节点）：写入私钥，并**同时**写入由私钥派生的公钥。
+    /// EasyTier 2.6.x 在 local_public_key 缺失时会报 "local public key is not set"。
+    #[test]
+    fn secure_mode_writes_private_key_and_derived_public_key() {
+        let mut input = base_input();
+        input.local_private_key = Some("4n+5ZbbbEvFyWIahq2y7/ZNot0gTUCHVyyVZPQ0ASh4=".to_string());
+        let toml = build_network_toml(&input);
+        assert!(toml.contains("[secure_mode]"));
+        assert!(toml.contains("enabled = true"));
+        assert!(
+            toml.contains("local_private_key = \"4n+5ZbbbEvFyWIahq2y7/ZNot0gTUCHVyyVZPQ0ASh4=\"")
+        );
+        // 公钥必须存在且与私钥匹配。
+        assert!(
+            toml.contains("local_public_key = \"UfdSzl893uZIEgWHpN+pOiVEVmYoPnF76UNVeHQIvmA=\"")
+        );
+    }
+
+    /// 场景三（客户端侧）：凭据节点只有 enabled = true，无 network_secret / 私钥。
+    #[test]
+    fn credential_client_enables_secure_mode_without_secret() {
+        let mut input = base_input();
+        input.network_secret = None;
+        input.peers = vec!["tcp://relay.example.com:11010".to_string()];
+        input.peer_public_key = Some("PUB".to_string());
+        let toml = build_network_toml(&input);
+        assert!(toml.contains("[secure_mode]"));
+        assert!(toml.contains("enabled = true"));
+        assert!(!toml.contains("local_private_key"));
+        assert!(!toml.contains("network_secret"));
+        assert!(toml.contains("[[peer]]"));
+        assert!(toml.contains("peer_public_key = \"PUB\""));
+    }
+
+    #[test]
+    fn peer_public_key_only_applies_to_first_peer() {
+        let mut input = base_input();
+        input.peers = vec!["tcp://a:1".to_string(), "tcp://b:2".to_string()];
+        input.peer_public_key = Some("PUB".to_string());
+        let toml = build_network_toml(&input);
+        assert_eq!(toml.matches("peer_public_key").count(), 1);
+    }
+
+    fn join_params<'a>(cred: Option<&'a str>, secret: Option<&'a str>) -> JoinCommandParams<'a> {
+        JoinCommandParams {
+            network_name: "office",
+            credential_secret: cred,
+            network_secret: secret,
+            local_private_key: None,
+            peer: "tcp://relay.example.com:11010",
+            ipv4: Some("10.126.126.2"),
+            hostname: Some("node-1"),
+            core_path: "easytier-core",
+            listeners: vec!["tcp://0.0.0.0:11010".to_string()],
+        }
+    }
+
+    /// 固定节点：使用 --network-secret，且不带 --credential。
+    #[test]
+    fn fixed_node_command_uses_network_secret() {
+        let cmd = build_join_command(&join_params(None, Some("DERIVED")));
+        assert!(cmd.contains("--network-secret DERIVED"));
+        assert!(cmd.contains("--secure-mode"));
+        assert!(!cmd.contains("--credential"));
+    }
+
+    /// 固定节点：一键命令携带本节点持久化私钥。
+    #[test]
+    fn fixed_node_command_includes_local_private_key() {
+        let mut params = join_params(None, Some("DERIVED"));
+        params.local_private_key = Some("NODEKEY");
+        let cmd = build_join_command(&params);
+        assert!(cmd.contains("--local-private-key NODEKEY"));
+    }
+
+    /// 临时节点：使用 --credential，且不带 --network-secret。
+    #[test]
+    fn temporary_node_command_uses_credential() {
+        let cmd = build_join_command(&join_params(Some("CRED"), None));
+        assert!(cmd.contains("--credential CRED"));
+        assert!(cmd.contains("--secure-mode"));
+        assert!(!cmd.contains("--network-secret"));
+    }
+
+    /// 固定节点配置：network_secret 写入 [network_identity]。
+    #[test]
+    fn fixed_node_config_contains_network_secret() {
+        let mut input = base_input();
+        input.network_secret = Some("DERIVED".to_string());
+        let toml = build_network_toml(&input);
+        assert!(toml.contains("[network_identity]"));
+        assert!(toml.contains("network_secret = \"DERIVED\""));
+        assert!(toml.contains("[secure_mode]"));
+    }
+
+    /// 客户端节点高级 flags：与默认值相同的项不输出，覆盖项写入 [flags]。
+    #[test]
+    fn client_node_advanced_flags_emit_only_overrides() {
+        let mut input = base_input();
+        let mut flags = Map::new();
+        flags.insert("multi_thread".to_string(), json!(true));
+        flags.insert("accept_dns".to_string(), json!(true));
+        flags.insert("p2p_only".to_string(), json!(false)); // 默认值 -> 不输出
+        flags.insert("need_p2p".to_string(), json!(false)); // 默认 true，显式关闭 -> 输出
+        flags.insert("relay_network_whitelist".to_string(), json!("office"));
+        flags.insert("foreign_relay_bps_limit".to_string(), json!(0)); // 默认值 -> 不输出
+        input.flags = flags;
+        let toml = build_network_toml(&input);
+        assert!(toml.contains("[flags]"));
+        assert!(toml.contains("multi_thread = true"));
+        assert!(toml.contains("accept_dns = true"));
+        assert!(toml.contains("relay_network_whitelist = \"office\""));
+        assert!(toml.contains("need_p2p = false"));
+        assert!(!toml.contains("p2p_only"));
+        assert!(!toml.contains("foreign_relay_bps_limit"));
+    }
+
+    #[test]
+    fn secure_mode_off_omits_block_and_key() {
+        let mut input = base_input();
+        input.secure_mode = false;
+        input.local_private_key = Some("PRIV".to_string());
+        let toml = build_network_toml(&input);
+        assert!(!toml.contains("[secure_mode]"));
+        assert!(!toml.contains("local_private_key"));
+    }
 }

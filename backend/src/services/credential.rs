@@ -120,6 +120,14 @@ pub async fn create_credential(
     input: CreateCredentialInput,
 ) -> AppResult<(PublicCredential, String)> {
     let network = get_network_row_or_throw(state, &input.network_id)?;
+    // 官方升级注意事项：凭据功能要求整条链路都支持安全模式，因此签发凭据的网络必须开启
+    // secure mode，否则客户端即使在命令行传入 --credential 也无法完成认证。
+    if !network.secure_mode {
+        return Err(bad_request(
+            "凭据功能要求网络开启安全模式（secure mode），请先在网络设置中开启并重启网络。",
+            None,
+        ));
+    }
     if !state.pm.is_running(&network.id) {
         return Err(bad_request(
             "网络实例未运行，无法签发凭据。请先启动该网络。",

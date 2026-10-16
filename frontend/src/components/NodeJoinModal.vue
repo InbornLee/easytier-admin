@@ -33,11 +33,21 @@ const tab = ref<"command" | "config">("command");
 // 可选的监听端口覆盖；null 表示使用节点保存的监听器
 const listenPort = ref<number | null>(null);
 
-// EasyTier 2.x 临时凭据必须通过 --credential 传入，单独用配置文件无法完成凭据认证
+const isFixed = computed(() => info.value?.nodeType === "fixed");
+
+// 固定节点：配置文件已含 network_secret，无需 --credential；
+// 临时节点：EasyTier 2.x 要求凭据通过命令行 --credential 传入。
+// 示例统一用相对路径 ./easytier-core，避免把控制台主机上的绝对路径带进来。
 const configRunCommand = computed(() => {
   if (!info.value) return "";
-  const core = info.value.command.split(" ")[0] || "easytier-core";
-  return t("nodeJoin.configRunCommand", { core, secret: info.value.credential.secret });
+  const core = "./easytier-core";
+  if (info.value.nodeType === "fixed") {
+    return t("nodeJoin.configRunCommandFixed", { core });
+  }
+  return t("nodeJoin.configRunCommand", {
+    core,
+    secret: info.value.credential?.secret ?? "",
+  });
 });
 const peer = ref<string>("");
 
@@ -99,13 +109,19 @@ function downloadConfig() {
   >
     <n-spin :show="loading">
       <template v-if="info">
-        <n-alert type="warning" :show-icon="true" class="mb">
+        <n-alert v-if="isFixed" type="info" :show-icon="true" class="mb">
+          {{ t("nodeJoin.fixedNodeInfoPrefix") }}<strong>{{ t("nodeJoin.fixedNodeInfoStrong") }}</strong>{{ t("nodeJoin.fixedNodeInfoSuffix") }}
+        </n-alert>
+        <n-alert v-else type="warning" :show-icon="true" class="mb">
           {{ t("nodeJoin.credentialWarningPrefix") }}
-          <strong>{{ formatTime(info.credential.expiresAt) }}</strong>{{ t("nodeJoin.credentialWarningSuffix") }}
+          <strong>{{ formatTime(info.credential?.expiresAt ?? 0) }}</strong>{{ t("nodeJoin.credentialWarningSuffix") }}
         </n-alert>
 
         <n-descriptions :column="2" size="small" bordered class="mb">
           <n-descriptions-item :label="t('nodeJoin.nodeName')">{{ info.node.name }}</n-descriptions-item>
+          <n-descriptions-item :label="t('nodeJoin.nodeTypeLabel')">
+            {{ isFixed ? t("nodeJoin.nodeTypeFixed") : t("nodeJoin.nodeTypeTemporary") }}
+          </n-descriptions-item>
           <n-descriptions-item :label="t('nodeJoin.virtualIp')">
             {{ info.node.ipv4 || t("nodeJoin.autoDhcp") }}
           </n-descriptions-item>
@@ -145,7 +161,22 @@ function downloadConfig() {
               <span class="port-hint">{{ t("nodeJoin.overridePortHint") }}</span>
             </div>
           </n-descriptions-item>
-          <n-descriptions-item :label="t('nodeJoin.sharedNodePublicKey')">
+          <n-descriptions-item v-if="isFixed" :label="t('nodeJoin.networkSecretLabel')" :span="2">
+            <CopyText :text="info.networkSecret" masked />
+          </n-descriptions-item>
+          <n-descriptions-item v-if="isFixed" :label="t('nodeJoin.localPublicKeyLabel')" :span="2">
+            <CopyText :text="info.localPublicKey" />
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('nodeJoin.peerLockLabel')" :span="2">
+            <n-tag
+              :type="info.peerPublicKey ? 'success' : 'warning'"
+              size="small"
+              :bordered="false"
+            >
+              {{ info.peerPublicKey ? t("nodeJoin.peerLocked") : t("nodeJoin.peerUnlocked") }}
+            </n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('nodeJoin.sharedNodePublicKey')" :span="2">
             <CopyText :text="info.sharedNodePublicKey" masked />
           </n-descriptions-item>
         </n-descriptions>
@@ -157,7 +188,10 @@ function downloadConfig() {
                 <div class="code-block mono">{{ info.command }}</div>
               </n-tab-pane>
               <n-tab-pane name="config" :tab="t('nodeJoin.tabConfig')">
-                <n-alert type="warning" :show-icon="true" class="mb">
+                <n-alert v-if="isFixed" type="info" :show-icon="true" class="mb">
+                  {{ t("nodeJoin.configWarningFixedPrefix") }}<strong>{{ t("nodeJoin.configWarningFixedStrong") }}</strong>{{ t("nodeJoin.configWarningFixedMiddle") }}<strong>{{ t("nodeJoin.configWarningFixedStrong2") }}</strong>{{ t("nodeJoin.configWarningFixedSuffix") }}
+                </n-alert>
+                <n-alert v-else type="warning" :show-icon="true" class="mb">
                   {{ t("nodeJoin.configWarningPrefix") }}<strong>{{ t("nodeJoin.configWarningStrong") }}</strong>{{ t("nodeJoin.configWarningMiddle") }}<span class="mono">{{ t("nodeJoin.configWarningCode") }}</span>{{ t("nodeJoin.configWarningSuffix") }}
                 </n-alert>
                 <n-form-item :label="t('nodeJoin.configRunLabel')" :show-feedback="false">

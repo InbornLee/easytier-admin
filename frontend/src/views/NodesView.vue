@@ -119,9 +119,11 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
       h("div", {}, [
         h("div", { class: "cell-name" }, [
           row.name,
-          !row.credentialId
-            ? h("span", { class: "no-cred" }, t("nodes.noCredential"))
-            : null,
+          row.type === "fixed"
+            ? h("span", { class: "no-cred" }, t("nodes.nodeTypeFixed"))
+            : !row.credentialId
+              ? h("span", { class: "no-cred" }, t("nodes.noCredential"))
+              : null,
         ]),
         h("div", { class: "cell-sub mono" }, `${row.hostname} · ${row.ipv4 || "DHCP"}`),
       ]),
@@ -209,11 +211,15 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
           { size: "tiny", quaternary: true, onClick: () => openEdit(row) },
           { icon: () => h(NIcon, { component: CreateOutline }), default: () => t("common.edit") },
         ),
-        h(
-          NButton,
-          { size: "tiny", quaternary: true, onClick: () => rotate(row) },
-          { icon: () => h(NIcon, { component: ShieldOutline }), default: () => t("nodes.actionRotate") },
-        ),
+        ...(row.type !== "fixed"
+          ? [
+              h(
+                NButton,
+                { size: "tiny", quaternary: true, onClick: () => rotate(row) },
+                { icon: () => h(NIcon, { component: ShieldOutline }), default: () => t("nodes.actionRotate") },
+              ),
+            ]
+          : []),
         h(
           NButton,
           { size: "tiny", quaternary: true, type: "error", onClick: () => remove(row) },

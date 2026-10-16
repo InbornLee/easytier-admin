@@ -5,7 +5,8 @@ import type { FormInst, FormRules } from "naive-ui";
 import { nodeApi } from "@/api";
 import { extractError } from "@/api/client";
 import { message } from "@/utils/feedback";
-import type { Network, NodeItem } from "@/types";
+import AdvancedFlags from "@/components/AdvancedFlags.vue";
+import { NODE_DEFAULT_FLAGS, type Network, type NodeAdvancedFlags, type NodeItem } from "@/types";
 
 const props = defineProps<{
   show: boolean;
@@ -28,6 +29,14 @@ const visible = computed({
 
 const formRef = ref<FormInst | null>(null);
 const submitting = ref(false);
+const advanced = ref(false);
+
+const submitLabel = computed(() => {
+  if (props.node) return t("common.save");
+  return model.nodeType === "fixed"
+    ? t("nodes.createFixed")
+    : t("nodes.createAndIssue");
+});
 
 const DEFAULT_LISTENERS = [
   "tcp://0.0.0.0:11010",
@@ -38,6 +47,7 @@ const model = reactive({
   networkId: "",
   name: "",
   hostname: "",
+  nodeType: "temporary" as "temporary" | "fixed",
   autoIp: true,
   ipv4: "",
   description: "",
@@ -48,6 +58,7 @@ const model = reactive({
   reusable: true,
   groups: [] as string[],
   allowedProxyCidrs: [] as string[],
+  flags: { ...NODE_DEFAULT_FLAGS } as NodeAdvancedFlags,
 });
 
 const ttlOptions = computed(() => [
@@ -71,11 +82,13 @@ watch(
   () => props.show,
   (v) => {
     if (!v) return;
+    advanced.value = false;
     if (props.node) {
       Object.assign(model, {
         networkId: props.node.networkId,
         name: props.node.name,
         hostname: props.node.hostname,
+        nodeType: props.node.type === "fixed" ? "fixed" : "temporary",
         autoIp: !props.node.ipv4,
         ipv4: props.node.ipv4 ?? "",
         description: props.node.description ?? "",
@@ -84,12 +97,17 @@ watch(
             ? [...props.node.listeners]
             : [...DEFAULT_LISTENERS],
         proxyNetworks: [...props.node.proxyNetworks],
+        flags: {
+          ...NODE_DEFAULT_FLAGS,
+          ...(props.node.flags ?? {}),
+        } as NodeAdvancedFlags,
       });
     } else {
       Object.assign(model, {
         networkId: props.networkId ?? props.networks[0]?.id ?? "",
         name: "",
         hostname: "",
+        nodeType: "temporary",
         autoIp: true,
         ipv4: "",
         description: "",
@@ -100,6 +118,7 @@ watch(
         reusable: true,
         groups: [],
         allowedProxyCidrs: [],
+        flags: { ...NODE_DEFAULT_FLAGS },
       });
     }
   },
@@ -121,6 +140,7 @@ async function submit() {
         description: model.description,
         listeners: model.listeners.filter(Boolean),
         proxyNetworks: model.proxyNetworks,
+        flags: { ...model.flags },
       });
       message.success(t("nodes.updated"));
       emit("saved", { node: props.node });
@@ -133,14 +153,18 @@ async function submit() {
         description: model.description,
         listeners: model.listeners.filter(Boolean),
         proxyNetworks: model.proxyNetworks,
+        nodeType: model.nodeType,
         issueCredential: true,
+        flags: { ...model.flags },
         ttlSeconds: model.ttlSeconds,
         allowRelay: model.allowRelay,
         reusable: model.reusable,
         groups: model.groups,
         allowedProxyCidrs: model.allowedProxyCidrs,
       });
-      message.success(t("nodes.created"));
+      message.success(
+        model.nodeType === "fixed" ? t("nodes.createdFixed") : t("nodes.created"),
+      );
       emit("saved", { node: result.node, credentialSecret: result.credentialSecret });
     }
     visible.value = false;
@@ -177,6 +201,18 @@ async function submit() {
           <n-input v-model:value="model.hostname" :placeholder="t('nodes.hostnamePlaceholder')" />
         </n-form-item-gi>
       </n-grid>
+
+      <template v-if="!node">
+        <n-form-item :label="t('nodes.nodeTypeLabel')">
+          <n-radio-group v-model:value="model.nodeType">
+            <n-radio-button value="fixed">{{ t("nodes.nodeTypeFixed") }}</n-radio-button>
+            <n-radio-button value="temporary">{{ t("nodes.nodeTypeTemporary") }}</n-radio-button>
+          </n-radio-group>
+        </n-form-item>
+        <n-alert type="info" :show-icon="true" class="mb">
+          {{ model.nodeType === "fixed" ? t("nodes.fixedNodeHint") : t("nodes.temporaryNodeHint") }}
+        </n-alert>
+      </template>
 
       <n-form-item :label="t('nodes.virtualIp')">
         <div class="ip-row">
@@ -218,7 +254,15 @@ async function submit() {
         />
       </n-form-item>
 
-      <template v-if="!node">
+      <n-divider title-placement="left" style="margin: 4px 0 12px">
+        {{ t("nodes.adv.title") }}
+        <n-button quaternary size="tiny" @click="advanced = !advanced">
+          {{ advanced ? t("nodes.adv.collapse") : t("nodes.adv.expand") }}
+        </n-button>
+      </n-divider>
+      <AdvancedFlags v-if="advanced" v-model="model.flags" />
+
+      <template v-if="!node && model.nodeType === 'temporary'">
         <n-divider title-placement="left" style="margin: 4px 0 12px">
           {{ t("nodes.credentialSection") }}
         </n-divider>
@@ -246,7 +290,7 @@ async function submit() {
       <div class="modal-footer">
         <n-button @click="visible = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" :loading="submitting" @click="submit">
-          {{ node ? t("common.save") : t("nodes.createAndIssue") }}
+          {{ submitLabel }}
         </n-button>
       </div>
     </template>
@@ -254,6 +298,9 @@ async function submit() {
 </template>
 
 <style scoped>
+.mb {
+  margin-bottom: 12px;
+}
 .hint {
   font-size: 12px;
   opacity: 0.6;

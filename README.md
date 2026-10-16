@@ -25,8 +25,8 @@
 | 模块 | 说明 |
 | --- | --- |
 | 管理员与账号 | 首次运行初始化管理员；Argon2id 强哈希；强密码策略；多用户与角色（管理员/运维/访客）；修改/重置密码 |
-| 网络管理 | 新建/编辑/删除网络（共享节点实例），启停/重启，自动启动，自动分配监听端口与 RPC 端口，安全模式与固定公钥 |
-| 节点管理 | 新建客户端节点并自动签发凭据；自动分配虚拟 IP；节点在线状态、延迟、流量、NAT 类型；一键接入命令 / config.toml / 二维码 |
+| 网络管理 | 新建/编辑/删除网络（共享节点实例），启停/重启，自动启动，自动分配监听端口与 RPC 端口，安全模式、`network_secret`（KDF 派生）与固定公钥 |
+| 节点管理 | 新建**固定节点**（`network_secret` 接入，不签发凭据）或**临时节点**（签发凭据）；自动分配虚拟 IP；节点在线状态、延迟、流量、NAT 类型；一键接入命令 / `config.toml` / 二维码 |
 | 连接拓扑 | 基于实时 peer 数据渲染节点连接图（Vue Flow），区分直连/中继、在线/离线 |
 | 凭据管理 | 通过 `easytier-cli credential` 签发/列举/撤销临时凭据，支持 TTL、ACL 分组、是否允许中继、允许代理网段、是否可复用 |
 | 多用户与分享 | 网络归属于创建者；非管理员仅能看到自己创建或被分享的网络（管理员可见全部）；可将网络以「只读 / 可管理」分享给其他用户；支持归属转移 |
@@ -126,13 +126,53 @@ docker compose up -d --build
 ## 首次使用流程
 
 1. 打开控制台，进入**初始化页面**创建管理员账号（密码需 ≥12 位且包含大小写、数字、特殊字符）。
-2. 「网络管理」→ **新建网络**：填写网络名称、EasyTier 网络标识（`network-name`）、虚拟网段（如 `10.126.126.1/24`）、公共共享节点，并选择加密模式与是否立即启动。
+2. 「网络管理」→ **新建网络**：填写网络名称、EasyTier 网络标识（`network-name`）、虚拟网段（如 `10.126.126.1/24`）、公共共享节点；**开启安全模式时必须设置网络密钥（`network_secret`）**，输入的密钥会经 Argon2id 强加密转换（KDF 派生）后使用，明文不落库；并选择是否立即启动。
    - 启动后，该网络即由控制台托管的 `easytier-core` 共享节点运行。
-3. 「节点管理」→ **新建节点**：选择网络，系统自动分配虚拟 IP 并签发接入凭据。
+3. 「节点管理」→ **新建节点**：选择网络与**节点类型**——**固定节点**（用 `network_secret` 接入，不签发凭据）或**临时节点**（签发凭据）；系统自动分配虚拟 IP。
 4. 在节点列表中点击 **接入**：获取一键运行命令、`config.toml` 与二维码，在目标设备上执行即可通过凭据加入网络。
 5. 在网络详情中查看**节点详情 / 活跃情况 / 连接拓扑 / 路由表 / 凭据 / 运行日志**。
 
-客户端也可直接使用命令接入：
+客户端接入分两种（对应官方场景一与场景三）：
+
+**固定节点**（`network_secret` 接入，无需 `--credential`）：
+
+```bash
+easytier-core -d \
+  --network-name <网络标识> \
+  --network-secret '<KDF 派生后的网络密钥>' \
+  --secure-mode \
+  --local-private-key '<本节点私钥-base64>' \
+  --local-public-key '<本节点公钥-base64>' \
+  -p tcp://<共享节点地址>:11011
+```
+
+控制台生成的 `config.toml` 已含 `network_secret` 与安全模式，直接启动即可：
+
+```toml
+instance_name = "office-node-1"
+hostname = "node-1"
+ipv4 = "10.126.126.2"
+listeners = ["tcp://0.0.0.0:11010", "udp://0.0.0.0:11010"]
+
+[network_identity]
+network_name = "office"
+network_secret = "<KDF 派生后的网络密钥>"
+
+[secure_mode]
+enabled = true
+local_private_key = "<本节点私钥-base64>"
+local_public_key = "<本节点公钥-base64>"
+
+[[peer]]
+uri = "tcp://shared-node.example.com:11011"
+peer_public_key = "<共享节点公钥-base64>"
+```
+
+```bash
+easytier-core -c config.toml
+```
+
+**临时节点**（凭据接入，`--credential` 隐式开启安全模式，无需 `network_secret`）：
 
 ```bash
 easytier-core -d \
@@ -140,6 +180,29 @@ easytier-core -d \
   --secure-mode \
   --credential <凭据密钥> \
   -p tcp://<共享节点或公共节点地址>:11010
+```
+
+控制台生成的 `config.toml` 不含 `network_secret`，需在命令行补充凭据：
+
+```toml
+instance_name = "office-node-1"
+hostname = "node-1"
+ipv4 = "10.126.126.2"
+listeners = ["tcp://0.0.0.0:11010", "udp://0.0.0.0:11010"]
+
+[network_identity]
+network_name = "office"
+
+[secure_mode]
+enabled = true
+
+[[peer]]
+uri = "tcp://shared-node.example.com:11010"
+peer_public_key = "<共享节点公钥-base64>"
+```
+
+```bash
+easytier-core -c config.toml --credential <凭据密钥>
 ```
 
 ---
@@ -274,9 +337,36 @@ easytier-core -d \
 
 ---
 
+## 安全模式（Secure Mode）与公钥锁定
+
+本项目按官方 [安全模式](https://easytier.cn/guide/network/secure-mode.html) 说明生成网络与节点配置：
+
+- **共享节点固定私钥**：新建网络时即生成并持久化 `local_private_key`（AES-256-GCM 加密落库），写入共享节点配置的 `[secure_mode]`，避免其重启后公钥变化导致客户端锁定失效。
+- **`network_secret` 强加密转换（场景一）**：开启安全模式时**必须显式设置网络密钥**；用户输入的明文经 **Argon2id（64 MiB / 3 次迭代）+ 随机盐**派生为真正的 `network_secret`，明文不落库、不落配置，落库的是派生值的 AES-256-GCM 密文。
+- **节点类型**：**固定节点**用该 `network_secret` 接入（配置内含派生后的密钥，**不需要** `--credential`）；**临时节点**用凭据接入（配置**不含** `network_secret`，命令行传 `--credential`）。
+- **关闭安全模式即不输出**：网络关闭「安全模式」后，生成的配置不再包含 `[secure_mode]`，也不会附带私钥。
+- **客户端锁定共享节点公钥（场景二）**：当节点的接入地址（peer）指向本共享节点自身（`映射监听器` / 本机监听地址）时，控制台会自动把该共享节点公钥写入客户端配置：
+
+  ```toml
+  [secure_mode]
+  enabled = true
+
+  [[peer]]
+  uri = "tcp://shared-node.example.com:11011"
+  peer_public_key = "<共享节点公钥-base64>"
+  ```
+
+  若 peer 是公共中继（`external_node` / 默认 `public.easytier.cn`）等无法获知公钥的地址，则**不会**写入 `peer_public_key`，节点接入弹窗会提示「未锁定」，你可在配置文件中手动补充 `peer_public_key`。
+- **临时凭据（场景三）保留**：客户端配置同样包含 `[secure_mode] enabled = true`，凭据通过命令行 `--credential` 传入（`--credential` 隐式开启安全模式，无需 `network_secret`）；默认不允许中继、不允许代理网段，需显式放开。
+- `local_private_key` 与 `local_public_key` 会**成对写入**配置。官方新版可只给私钥（自动派生公钥），但 EasyTier 2.6.x 的 `SecureModeConfig::public_key()` 在 `local_public_key` 缺失时会报 `local public key is not set`，因此控制台显式写出由私钥派生的公钥，兼容新旧版本。接入弹窗中展示的「共享节点公钥 / 本节点公钥」即来自同一密钥对，用于 `peer_public_key` 锁定与核对。
+
+> 凭据功能要求整条链路都支持安全模式：**未开启安全模式的网络无法签发凭据**，控制台会直接拒绝创建凭据（节点创建随之回滚）。
+
+---
+
 ## 临时凭据的启动方式（重要）
 
-EasyTier 2.x 中，**临时凭据必须通过命令行 `--credential` 传入**。仅靠配置文件里的 `[secure_mode] local_private_key` 不会进入凭据认证模式，连接时会报：
+EasyTier 2.x 中，**临时凭据必须通过命令行 `--credential` 传入**。配置文件里的 `[secure_mode] enabled = true` 只开启安全模式，不包含凭据本身，因此仅用配置文件启动会报：
 
 ```
 authentication failed: invalid proof and unknown credential

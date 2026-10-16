@@ -274,9 +274,11 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
       h("div", {}, [
         h("div", { class: "cell-name" }, [
           row.name,
-          !row.credentialId
-            ? h("span", { class: "no-cred" }, t("nodes.noCredential"))
-            : null,
+          row.type === "fixed"
+            ? h("span", { class: "no-cred" }, t("nodes.nodeTypeFixed"))
+            : !row.credentialId
+              ? h("span", { class: "no-cred" }, t("nodes.noCredential"))
+              : null,
         ]),
         h("div", { class: "cell-sub mono" }, `${row.hostname} · ${row.ipv4 || "DHCP"}`),
       ]),
@@ -362,17 +364,19 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
             { icon: () => h(NIcon, { component: CreateOutline }), default: () => t("common.edit") },
           ),
         );
-        actions.push(
-          h(
-            NButton,
-            {
-              size: "tiny",
-              quaternary: true,
-              onClick: () => rotateCredential(row),
-            },
-            { icon: () => h(NIcon, { component: ShieldOutline }), default: () => t("nodes.actionRotate") },
-          ),
-        );
+        if (row.type !== "fixed") {
+          actions.push(
+            h(
+              NButton,
+              {
+                size: "tiny",
+                quaternary: true,
+                onClick: () => rotateCredential(row),
+              },
+              { icon: () => h(NIcon, { component: ShieldOutline }), default: () => t("nodes.actionRotate") },
+            ),
+          );
+        }
         actions.push(
           h(
             NButton,

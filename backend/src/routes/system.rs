@@ -27,7 +27,7 @@ async fn health_handler(State(state): State<SharedState>) -> JsonResponse<Value>
     JsonResponse(json!({
         "status": "ok",
         "time": now_ms(),
-        "version": "1.0.0",
+        "version": env!("CARGO_PKG_VERSION"),
         "env": state.config.env,
     }))
 }
@@ -37,7 +37,7 @@ async fn info_handler(
     _user: AuthUser,
 ) -> AppResult<JsonResponse<Value>> {
     Ok(JsonResponse(json!({
-        "version": "1.0.0",
+        "version": env!("CARGO_PKG_VERSION"),
         "node": option_env!("RUSTC_VERSION").unwrap_or("Rust"),
         "platform": format!("{}/{}", std::env::consts::OS, std::env::consts::ARCH),
         "uptime": state.started_at.elapsed().as_secs(),

@@ -35,6 +35,8 @@ export default {
         listenPort: "监听端口",
         rpcPort: "RPC 端口",
         secureMode: "安全模式",
+        secureModeHint:
+          "安全模式（官方推荐）：共享节点固定 local_private_key，客户端可用共享节点公钥 peer_public_key 锁定，临时凭据接入也依赖安全模式。",
         autoStart: "自动启动",
         autoPortsAlertPrefix: "将由后端自动分配可用端口（从 ",
         autoPortsAlertSuffix:
@@ -137,6 +139,8 @@ export default {
         listenPort: "Listen port",
         rpcPort: "RPC port",
         secureMode: "Security mode",
+        secureModeHint:
+          "Secure mode (recommended): the shared node pins local_private_key, clients can pin the shared node public key via peer_public_key, and credential-based joins also require secure mode.",
         autoStart: "Auto start",
         autoPortsAlertPrefix:
           "The backend will auto-assign available ports (starting from ",

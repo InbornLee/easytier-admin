@@ -425,6 +425,9 @@ async function submit() {
           <n-switch v-model:value="model.autoStart" />
         </n-form-item-gi>
       </n-grid>
+      <n-alert type="info" :show-icon="true" class="mb">
+        {{ t("networkForm.form.secureModeHint") }}
+      </n-alert>
       <n-alert v-if="!isEdit && model.autoPorts" type="info" :show-icon="true" class="mb">
         {{ t("networkForm.form.autoPortsAlertPrefix") }}<span class="mono">EASYTIER_LISTEN_PORT_START</span> /
         <span class="mono">EASYTIER_RPC_PORT_START</span>{{ t("networkForm.form.autoPortsAlertSuffix") }}

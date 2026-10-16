@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=m.daocloud.io/docker.io/docker/dockerfile:1.7
 
 # ===== 全部使用国内镜像源 =====
 # 基础镜像：DaoCloud 镜像加速

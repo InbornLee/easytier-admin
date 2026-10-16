@@ -72,6 +72,7 @@ pub struct NodeRow {
     pub proxy_networks: String,
     pub flags: String,
     pub credential_id: Option<String>,
+    pub local_private_key_enc: Option<String>,
     pub peer_id: Option<i64>,
     pub status: String,
     pub last_seen_at: Option<i64>,
@@ -201,6 +202,7 @@ fn map_node(row: &Row<'_>) -> rusqlite::Result<NodeRow> {
         proxy_networks: row.get("proxy_networks")?,
         flags: row.get("flags")?,
         credential_id: row.get("credential_id")?,
+        local_private_key_enc: row.get("local_private_key_enc")?,
         peer_id: row.get("peer_id")?,
         status: row.get("status")?,
         last_seen_at: row.get("last_seen_at")?,
@@ -344,6 +346,7 @@ impl Db {
               proxy_networks TEXT NOT NULL DEFAULT '[]',
               flags TEXT NOT NULL DEFAULT '{}',
               credential_id TEXT,
+              local_private_key_enc TEXT,
               peer_id INTEGER,
               status TEXT NOT NULL DEFAULT 'unknown',
               last_seen_at INTEGER,
@@ -433,6 +436,18 @@ impl Db {
         };
         if !has_owner {
             conn.execute_batch("ALTER TABLE networks ADD COLUMN owner_id TEXT")?;
+        }
+
+        // 兼容旧库：为 nodes 补充 local_private_key_enc 列（固定节点的持久化静态私钥）
+        let has_node_key = {
+            let mut stmt = conn.prepare("PRAGMA table_info(nodes)")?;
+            let names = stmt
+                .query_map([], |row| row.get::<_, String>("name"))?
+                .collect::<rusqlite::Result<Vec<String>>>()?;
+            names.iter().any(|n| n == "local_private_key_enc")
+        };
+        if !has_node_key {
+            conn.execute_batch("ALTER TABLE nodes ADD COLUMN local_private_key_enc TEXT")?;
         }
         Ok(())
     }
@@ -765,12 +780,12 @@ impl Db {
     pub fn insert_node(&self, n: &NodeRow) -> AppResult<()> {
         let conn = self.lock();
         conn.execute(
-            "INSERT INTO nodes (id, network_id, name, hostname, ipv4, type, description, listeners, proxy_networks, flags, credential_id, peer_id, status, last_seen_at, created_at, updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
+            "INSERT INTO nodes (id, network_id, name, hostname, ipv4, type, description, listeners, proxy_networks, flags, credential_id, local_private_key_enc, peer_id, status, last_seen_at, created_at, updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
             params![
                 n.id, n.network_id, n.name, n.hostname, n.ipv4, n.r#type, n.description, n.listeners,
-                n.proxy_networks, n.flags, n.credential_id, n.peer_id, n.status, n.last_seen_at,
-                n.created_at, n.updated_at
+                n.proxy_networks, n.flags, n.credential_id, n.local_private_key_enc, n.peer_id, n.status,
+                n.last_seen_at, n.created_at, n.updated_at
             ],
         )?;
         Ok(())
@@ -779,10 +794,11 @@ impl Db {
     pub fn update_node(&self, n: &NodeRow) -> AppResult<()> {
         let conn = self.lock();
         conn.execute(
-            "UPDATE nodes SET name=?2, hostname=?3, ipv4=?4, description=?5, listeners=?6, proxy_networks=?7, flags=?8, credential_id=?9, peer_id=?10, status=?11, last_seen_at=?12, updated_at=?13 WHERE id=?1",
+            "UPDATE nodes SET name=?2, hostname=?3, ipv4=?4, description=?5, listeners=?6, proxy_networks=?7, flags=?8, credential_id=?9, peer_id=?10, status=?11, last_seen_at=?12, local_private_key_enc=?13, updated_at=?14 WHERE id=?1",
             params![
                 n.id, n.name, n.hostname, n.ipv4, n.description, n.listeners, n.proxy_networks,
-                n.flags, n.credential_id, n.peer_id, n.status, n.last_seen_at, n.updated_at
+                n.flags, n.credential_id, n.peer_id, n.status, n.last_seen_at, n.local_private_key_enc,
+                n.updated_at
             ],
         )?;
         Ok(())

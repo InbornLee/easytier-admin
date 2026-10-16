@@ -1,6 +1,6 @@
 [package]
 name = "easytier-admin-backend"
-version = "1.0.0"
+version = "1.0.2"
 edition = "2021"
 description = "EasyTier 控制台后端（Rust）"
 license = "MIT"

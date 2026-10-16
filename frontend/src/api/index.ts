@@ -156,6 +156,7 @@ export const nodeApi = {
     listeners?: string[];
     proxyNetworks?: string[];
     flags?: Record<string, string | number | boolean>;
+    nodeType?: "fixed" | "temporary";
     issueCredential?: boolean;
     ttlSeconds?: number;
     groups?: string[];
