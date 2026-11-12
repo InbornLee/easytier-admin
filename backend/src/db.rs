@@ -124,6 +124,14 @@ pub struct AuditLogRow {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone)]
+pub struct LoginAttemptRow {
+    pub failures: i64,
+    pub first_failure_at: i64,
+    pub last_failure_at: i64,
+    pub locked_until: i64,
+}
+
 pub struct NewNodeLog {
     pub network_id: Option<String>,
     pub node_id: Option<String>,
@@ -243,6 +251,15 @@ fn map_node_log(row: &Row<'_>) -> rusqlite::Result<NodeLogRow> {
     })
 }
 
+fn map_login_attempt(row: &Row<'_>) -> rusqlite::Result<LoginAttemptRow> {
+    Ok(LoginAttemptRow {
+        failures: row.get("failures")?,
+        first_failure_at: row.get("first_failure_at")?,
+        last_failure_at: row.get("last_failure_at")?,
+        locked_until: row.get("locked_until")?,
+    })
+}
+
 fn map_audit_log(row: &Row<'_>) -> rusqlite::Result<AuditLogRow> {
     Ok(AuditLogRow {
         id: row.get("id")?,
@@ -260,6 +277,21 @@ fn map_audit_log(row: &Row<'_>) -> rusqlite::Result<AuditLogRow> {
 
 // ------------------------------------------------------------------ Db
 
+/// 数据库包含密码哈希、加密后的网络/凭据密钥，仅允许服务运行账号读写。
+#[cfg(unix)]
+fn restrict_file_permissions(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    for suffix in ["", "-wal", "-shm"] {
+        let p = std::path::PathBuf::from(format!("{}{}", path.display(), suffix));
+        if p.exists() {
+            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn restrict_file_permissions(_path: &Path) {}
+
 pub struct Db {
     conn: Mutex<Connection>,
 }
@@ -270,6 +302,7 @@ impl Db {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
         )?;
+        restrict_file_permissions(path);
         Ok(Db {
             conn: Mutex::new(conn),
         })
@@ -406,6 +439,15 @@ impl Db {
               updated_at INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS login_attempts (
+              scope TEXT PRIMARY KEY,
+              failures INTEGER NOT NULL DEFAULT 0,
+              first_failure_at INTEGER NOT NULL,
+              last_failure_at INTEGER NOT NULL,
+              locked_until INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS login_attempts_last_idx ON login_attempts(last_failure_at);
+
             UPDATE nodes SET credential_id = NULL
             WHERE credential_id IS NOT NULL
               AND credential_id NOT IN (SELECT id FROM credentials);
@@ -449,6 +491,57 @@ impl Db {
         if !has_node_key {
             conn.execute_batch("ALTER TABLE nodes ADD COLUMN local_private_key_enc TEXT")?;
         }
+        Ok(())
+    }
+
+    // -------------------------------------------------------------- login_attempts
+
+    pub fn get_login_attempt(&self, scope: &str) -> AppResult<Option<LoginAttemptRow>> {
+        let conn = self.lock();
+        let row = conn
+            .query_row(
+                "SELECT * FROM login_attempts WHERE scope = ?1",
+                params![scope],
+                map_login_attempt,
+            )
+            .optional()?;
+        Ok(row)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_login_attempt(
+        &self,
+        scope: &str,
+        failures: i64,
+        first_failure_at: i64,
+        last_failure_at: i64,
+        locked_until: i64,
+        expire_before: i64,
+    ) -> AppResult<()> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO login_attempts (scope, failures, first_failure_at, last_failure_at, locked_until)
+             VALUES (?1,?2,?3,?4,?5)
+             ON CONFLICT(scope) DO UPDATE SET
+               failures = excluded.failures,
+               first_failure_at = excluded.first_failure_at,
+               last_failure_at = excluded.last_failure_at,
+               locked_until = excluded.locked_until",
+            params![scope, failures, first_failure_at, last_failure_at, locked_until],
+        )?;
+        conn.execute(
+            "DELETE FROM login_attempts WHERE last_failure_at < ?1",
+            params![expire_before],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_login_attempt(&self, scope: &str) -> AppResult<()> {
+        let conn = self.lock();
+        conn.execute(
+            "DELETE FROM login_attempts WHERE scope = ?1",
+            params![scope],
+        )?;
         Ok(())
     }
 

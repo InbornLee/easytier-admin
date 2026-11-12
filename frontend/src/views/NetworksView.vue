@@ -326,7 +326,12 @@ onMounted(load);
           <template #icon><n-icon :component="RefreshOutline" /></template>
           {{ t("common.refresh") }}
         </n-button>
-        <n-button size="small" type="primary" @click="openCreate">
+        <n-button
+          v-if="auth.user?.role !== 'viewer'"
+          size="small"
+          type="primary"
+          @click="openCreate"
+        >
           <template #icon><n-icon :component="AddOutline" /></template>
           {{ t("networks.newNetwork") }}
         </n-button>

@@ -48,6 +48,15 @@ pub struct Config {
 
     pub app_secret: String,
     pub jwt_ttl: u64,
+    /// 是否信任反向代理传入的 X-Forwarded-For（用于获取真实客户端 IP）。
+    /// 直接对外暴露时保持 false，否则攻击者可伪造来源 IP 绕过登录限流。
+    pub trust_proxy: bool,
+    /// 是否将登录令牌 Cookie 持久化（带 Max-Age）。
+    /// 默认 false：会话 Cookie，关闭浏览器即失效。
+    pub cookie_persist: bool,
+    /// 可选的初始化令牌（SETUP_TOKEN）。配置后首次初始化必须提供，
+    /// 防止未初始化的实例在公网被抢先注册管理员。
+    pub setup_token: Option<String>,
 
     pub easytier: EasyTierSettings,
 }
@@ -200,6 +209,16 @@ impl Config {
 
             app_secret,
             jwt_ttl: env_i64("JWT_TTL", 86400).max(0) as u64,
+            trust_proxy: env_bool("TRUST_PROXY", false),
+            cookie_persist: env_bool("COOKIE_PERSIST", false),
+            setup_token: {
+                let token = env_str("SETUP_TOKEN", "");
+                if token.is_empty() {
+                    None
+                } else {
+                    Some(token)
+                }
+            },
 
             easytier: EasyTierSettings {
                 core_path: env_str("EASYTIER_CORE_PATH", "easytier-core"),

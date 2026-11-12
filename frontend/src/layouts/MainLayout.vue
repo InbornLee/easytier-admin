@@ -31,13 +31,19 @@ function renderIcon(icon: typeof GridOutline) {
   return () => h(NIcon, null, { default: () => h(icon) });
 }
 
-const menuOptions = computed<MenuOption[]>(() => [
-  { label: t("nav.dashboard"), key: "dashboard", icon: renderIcon(GridOutline) },
-  { label: t("nav.networks"), key: "networks", icon: renderIcon(GitNetworkOutline) },
-  { label: t("nav.credentials"), key: "credentials", icon: renderIcon(KeyOutline) },
-  { label: t("nav.logs"), key: "logs", icon: renderIcon(DocumentTextOutline) },
-  { label: t("nav.settings"), key: "settings", icon: renderIcon(SettingsOutline) },
-]);
+const menuOptions = computed<MenuOption[]>(() => {
+  const options: MenuOption[] = [
+    { label: t("nav.dashboard"), key: "dashboard", icon: renderIcon(GridOutline) },
+    { label: t("nav.networks"), key: "networks", icon: renderIcon(GitNetworkOutline) },
+    { label: t("nav.credentials"), key: "credentials", icon: renderIcon(KeyOutline) },
+    { label: t("nav.logs"), key: "logs", icon: renderIcon(DocumentTextOutline) },
+  ];
+  // 系统设置包含服务端路径、二进制检测与账号管理，仅管理员可见。
+  if (auth.user?.role === "admin") {
+    options.push({ label: t("nav.settings"), key: "settings", icon: renderIcon(SettingsOutline) });
+  }
+  return options;
+});
 
 const activeKey = computed(() => {
   const name = route.name as string;

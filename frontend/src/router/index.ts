@@ -91,6 +91,10 @@ router.beforeEach(async (to) => {
   if (!auth.user) {
     return { name: "login", query: { redirect: to.fullPath } };
   }
+  // 系统设置仅管理员可用（后端接口同样有 AdminUser 校验）。
+  if (to.name === "settings" && auth.user.role !== "admin") {
+    return { name: "dashboard" };
+  }
   return true;
 });
 

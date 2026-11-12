@@ -1,6 +1,12 @@
 packages:
   - frontend
 
+# 安全覆盖：将存在安全公告的传递依赖固定到已修复版本
+overrides:
+  follow-redirects: ^1.16.3
+  source-map-js: ^1.2.2
+  "ansi-regex@5.0.0": 5.0.1
+
 allowBuilds:
   better-sqlite3: set this to true or false
   esbuild: true

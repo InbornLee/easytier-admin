@@ -124,7 +124,7 @@ async fn runtime_handler(
     user: AuthUser,
 ) -> AppResult<JsonResponse<Value>> {
     require_network_access(&state, &network_id, &user, false)?;
-    let limit = query.limit.unwrap_or(300);
+    let limit = query.limit.unwrap_or(300).clamp(1, 1000);
     Ok(JsonResponse(json!({
         "items": state.pm.recent_logs(&network_id, limit),
     })))

@@ -23,6 +23,7 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::easytier::cli::check_binaries;
 use crate::easytier::{LogLine, ProcessManager};
+use crate::services::login_guard::LoginGuard;
 use crate::services::metrics::{start_metrics_collector, MetricsStore};
 use crate::services::{network, settings};
 use crate::state::{AppState, RateLimiter, SharedState};
@@ -48,6 +49,11 @@ async fn main() {
 }
 
 async fn run(config: Config) -> anyhow::Result<()> {
+    // 运行期创建的所有文件（数据库、WAL、日志、配置）默认仅服务账号可读。
+    #[cfg(unix)]
+    unsafe {
+        libc::umask(0o077);
+    }
     let config = Arc::new(config);
 
     let db = Arc::new(Db::open(&config.db_path)?);
@@ -71,6 +77,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
         jwt_secret,
         rate_global: RateLimiter::new(600, Duration::from_secs(60)),
         rate_login: RateLimiter::new(10, Duration::from_secs(60)),
+        login_guard: LoginGuard::new(db.clone()),
         port_alloc: tokio::sync::Mutex::new(()),
         started_at: Instant::now(),
     });

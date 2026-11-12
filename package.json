@@ -1,6 +1,6 @@
 {
   "name": "easytier-admin",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "EasyTier 控制台 — 基于 easytier-core / easytier-cli 的网络与节点管理平台",
   "license": "MIT",

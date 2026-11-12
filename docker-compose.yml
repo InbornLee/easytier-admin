@@ -11,6 +11,9 @@ services:
     restart: unless-stopped
     # 使用内置 init 进程转发信号
     init: true
+    # 禁止容器内进程通过 setuid/setgid 提升权限
+    security_opt:
+      - no-new-privileges:true
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -32,6 +35,12 @@ services:
       - EASYTIER_DEFAULT_EXTERNAL_NODE=${EASYTIER_DEFAULT_EXTERNAL_NODE:-tcp://public.easytier.cn:11010}
       - EASYTIER_RPC_PORT_START=${EASYTIER_RPC_PORT_START:-15888}
       - EASYTIER_LISTEN_PORT_START=${EASYTIER_LISTEN_PORT_START:-11010}
+      # 登录令牌默认不持久化（会话 Cookie）
+      - COOKIE_PERSIST=${COOKIE_PERSIST:-false}
+      # 反向代理后置 true 以获取真实客户端 IP
+      - TRUST_PROXY=${TRUST_PROXY:-false}
+      # 可选：首次初始化令牌（防止未初始化实例被抢注管理员）
+      - SETUP_TOKEN=${SETUP_TOKEN:-}
     volumes:
       - ./data:/data
 

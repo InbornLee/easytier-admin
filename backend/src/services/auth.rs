@@ -7,6 +7,10 @@ use crate::state::AppState;
 use crate::util::now_ms;
 use crate::util::password::{check_password_policy, hash_password, verify_password};
 
+/// 用于均衡“用户不存在”与“密码错误”响应耗时的占位 Argon2id 哈希。
+/// 明文为无关的固定字符串，不用于任何真实账号。
+const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=65536,t=3,p=1$ctJpNtGgd1P9WYxCHDYDOg$SayBc5L+lRnejPjr0ANNZUZBaslPt08QdogpwBOmW5I";
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicUser {
@@ -108,9 +112,14 @@ pub async fn verify_login(
     password: &str,
 ) -> AppResult<Option<PublicUser>> {
     let Some(row) = state.db.get_user_by_username(username.trim())? else {
+        // 对不存在的用户也执行一次同等代价的 Argon2 校验，
+        // 避免响应时间差异被用于枚举用户名。
+        let _ = verify_password(DUMMY_PASSWORD_HASH.to_string(), password.to_string()).await;
         return Ok(None);
     };
     if row.disabled {
+        // 禁用账号也执行一次同等代价的校验，避免通过响应时间判断账号状态。
+        let _ = verify_password(row.password_hash.clone(), password.to_string()).await;
         return Ok(None);
     }
     if !verify_password(row.password_hash.clone(), password.to_string()).await {
@@ -181,13 +190,19 @@ pub fn update_user(
     let Some(row) = state.db.get_user_by_id(user_id)? else {
         return Err(not_found("用户不存在"));
     };
-    let role = patch.role.unwrap_or(row.role.clone());
+    let role = patch.role.clone().unwrap_or(row.role.clone());
     if !is_valid_role(&role) {
         return Err(bad_request("无效的角色", None));
     }
+    let disabled = patch.disabled.unwrap_or(row.disabled);
+    // 避免把最后一个可用管理员禁用或降级，导致系统永久失去管理入口。
+    let was_active_admin = row.role == "admin" && !row.disabled;
+    let remains_active_admin = role == "admin" && !disabled;
+    if was_active_admin && !remains_active_admin && state.db.count_active_admins()? <= 1 {
+        return Err(bad_request("不能禁用或降级最后一个管理员账号", None));
+    }
     let display_name = patch.display_name.or(row.display_name.clone());
     let email = patch.email.or(row.email.clone());
-    let disabled = patch.disabled.unwrap_or(row.disabled);
     state.db.update_user_profile(
         user_id,
         display_name.as_deref(),

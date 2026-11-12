@@ -5,6 +5,7 @@ use axum::Router;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::easytier::toml::validate_flags;
 use crate::error::{bad_request, forbidden, not_found, AppResult};
 use crate::middleware::{parse_body, AuthUser};
 use crate::services::audit::{record_audit, AuditInput};
@@ -110,6 +111,9 @@ fn validate(input: &NetworkInput, require_name: bool) -> AppResult<()> {
             }
         }
     }
+    if let Some(flags) = input.flags.as_ref() {
+        validate_flags(flags).map_err(|msg| bad_request(msg, None))?;
+    }
     Ok(())
 }
 
@@ -163,6 +167,10 @@ async fn create_handler(
     user: AuthUser,
     Json(body): Json<Value>,
 ) -> AppResult<JsonResponse<Value>> {
+    // 访客（viewer）为只读角色，不应通过创建网络获得所有者权限。
+    if user.role == "viewer" {
+        return Err(forbidden("访客角色无权创建网络"));
+    }
     let input: NetworkInput = parse_body(body)?;
     validate(&input, true)?;
     let network = create_network(&state, input.into(), Some(&user.id)).await?;
@@ -345,7 +353,7 @@ async fn runtime_logs_handler(
     user: AuthUser,
 ) -> AppResult<JsonResponse<Value>> {
     require_network_access(&state, &id, &user, false)?;
-    let limit = query.limit.unwrap_or(300);
+    let limit = query.limit.unwrap_or(300).clamp(1, 1000);
     Ok(JsonResponse(json!({
         "items": state.pm.recent_logs(&id, limit),
     })))

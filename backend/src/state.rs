@@ -8,6 +8,7 @@ use crate::config::{Config, EasyTierSettings};
 use crate::db::Db;
 use crate::easytier::cli::Cli;
 use crate::easytier::{LogLine, ProcessManager};
+use crate::services::login_guard::LoginGuard;
 use crate::services::metrics::MetricsStore;
 use crate::util::crypto::Crypto;
 
@@ -58,6 +59,7 @@ pub struct AppState {
     pub jwt_secret: String,
     pub rate_global: RateLimiter,
     pub rate_login: RateLimiter,
+    pub login_guard: LoginGuard,
     /// 串行化网络端口分配，避免多用户并发创建时分配到相同端口
     pub port_alloc: tokio::sync::Mutex<()>,
     pub started_at: std::time::Instant,

@@ -19,11 +19,13 @@ import RotateCredentialModal from "@/components/RotateCredentialModal.vue";
 import { networkApi, nodeApi } from "@/api";
 import { extractError } from "@/api/client";
 import { message, dialog } from "@/utils/feedback";
+import { useAuthStore } from "@/stores/auth";
 import { costInfo, formatBytes, formatTime } from "@/utils/format";
 import type { Network, NodeItem } from "@/types";
 
 const router = useRouter();
 const { t } = useI18n();
+const auth = useAuthStore();
 const loading = ref(false);
 const nodes = ref<NodeItem[]>([]);
 const networks = ref<Network[]>([]);
@@ -47,6 +49,19 @@ const filteredNodes = computed(() =>
     ? nodes.value.filter((n) => n.networkId === filterNetwork.value)
     : nodes.value,
 );
+
+const manageableNetworks = computed(() =>
+  networks.value.filter(
+    (n) =>
+      auth.user?.role === "admin" || n.access === "owner" || n.access === "manage",
+  ),
+);
+
+function canManageNode(node: NodeItem): boolean {
+  if (auth.user?.role === "admin") return true;
+  const network = networkMap.value.get(node.networkId);
+  return network?.access === "owner" || network?.access === "manage";
+}
 
 async function load() {
   loading.value = true;
@@ -201,30 +216,46 @@ const columns = computed<DataTableColumns<NodeItem>>(() => [
     fixed: "right",
     render: (row) =>
       h("div", { class: "row-actions" }, [
-        h(
-          NButton,
-          { size: "tiny", quaternary: true, type: "primary", onClick: () => openJoin(row) },
-          { icon: () => h(NIcon, { component: LinkOutline }), default: () => t("nodes.actionJoin") },
-        ),
-        h(
-          NButton,
-          { size: "tiny", quaternary: true, onClick: () => openEdit(row) },
-          { icon: () => h(NIcon, { component: CreateOutline }), default: () => t("common.edit") },
-        ),
-        ...(row.type !== "fixed"
+        ...(canManageNode(row)
           ? [
               h(
                 NButton,
-                { size: "tiny", quaternary: true, onClick: () => rotate(row) },
-                { icon: () => h(NIcon, { component: ShieldOutline }), default: () => t("nodes.actionRotate") },
+                { size: "tiny", quaternary: true, type: "primary", onClick: () => openJoin(row) },
+                {
+                  icon: () => h(NIcon, { component: LinkOutline }),
+                  default: () => t("nodes.actionJoin"),
+                },
+              ),
+              h(
+                NButton,
+                { size: "tiny", quaternary: true, onClick: () => openEdit(row) },
+                {
+                  icon: () => h(NIcon, { component: CreateOutline }),
+                  default: () => t("common.edit"),
+                },
+              ),
+              ...(row.type !== "fixed"
+                ? [
+                    h(
+                      NButton,
+                      { size: "tiny", quaternary: true, onClick: () => rotate(row) },
+                      {
+                        icon: () => h(NIcon, { component: ShieldOutline }),
+                        default: () => t("nodes.actionRotate"),
+                      },
+                    ),
+                  ]
+                : []),
+              h(
+                NButton,
+                { size: "tiny", quaternary: true, type: "error", onClick: () => remove(row) },
+                {
+                  icon: () => h(NIcon, { component: TrashOutline }),
+                  default: () => t("common.delete"),
+                },
               ),
             ]
           : []),
-        h(
-          NButton,
-          { size: "tiny", quaternary: true, type: "error", onClick: () => remove(row) },
-          { icon: () => h(NIcon, { component: TrashOutline }), default: () => t("common.delete") },
-        ),
       ]),
   },
 ]);
@@ -252,7 +283,12 @@ onMounted(load);
           <template #icon><n-icon :component="RefreshOutline" /></template>
           {{ t("common.refresh") }}
         </n-button>
-        <n-button size="small" type="primary" @click="openCreate">
+        <n-button
+          v-if="manageableNetworks.length > 0"
+          size="small"
+          type="primary"
+          @click="openCreate"
+        >
           <template #icon><n-icon :component="AddOutline" /></template>
           {{ t("nodes.createTitle") }}
         </n-button>
@@ -272,7 +308,7 @@ onMounted(load);
 
     <NodeFormModal
       v-model:show="showNodeModal"
-      :networks="networks"
+      :networks="manageableNetworks"
       :node="editingNode"
       @saved="onSaved"
     />

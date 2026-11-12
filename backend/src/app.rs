@@ -1,6 +1,7 @@
 use axum::extract::{Request, State};
-use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
+use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use axum::middleware as axum_mw;
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
 use serde_json::json;
@@ -11,12 +12,18 @@ use crate::routes::api_router;
 use crate::state::SharedState;
 
 pub fn build_router(state: SharedState) -> Router {
+    let hsts = std::env::var("COOKIE_SECURE")
+        .map(|v| v.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
     let router: Router<SharedState> = Router::new()
         .merge(api_router())
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
             rate_limit_global,
         ))
+        .layer(axum_mw::from_fn(move |req, next| {
+            security_headers(req, next, hsts)
+        }))
         .fallback(spa_fallback);
 
     let router = if state.config.cors_origin.is_empty() {
@@ -37,6 +44,43 @@ pub fn build_router(state: SharedState) -> Router {
     };
 
     router.with_state(state)
+}
+
+async fn security_headers(req: Request, next: Next, hsts: bool) -> Response {
+    let is_api = req.uri().path().starts_with("/api/");
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(
+        HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
+    );
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+             img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; \
+             object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        ),
+    );
+    if hsts {
+        headers.insert(
+            header::STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        );
+    }
+    if is_api {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
+    response
 }
 
 async fn spa_fallback(State(state): State<SharedState>, req: Request) -> Response {

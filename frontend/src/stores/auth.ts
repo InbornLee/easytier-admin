@@ -12,12 +12,14 @@ export interface SessionUser {
 export const useAuthStore = defineStore("auth", () => {
   const user = ref<SessionUser | null>(null);
   const initialized = ref<boolean | null>(null);
+  const setupTokenRequired = ref(false);
   const ready = ref(false);
 
   async function bootstrap(): Promise<void> {
     try {
       const status = await authApi.status();
       initialized.value = status.initialized;
+      setupTokenRequired.value = status.setupTokenRequired ?? false;
       if (status.initialized) {
         try {
           const { user: me } = await authApi.me();
@@ -45,6 +47,7 @@ export const useAuthStore = defineStore("auth", () => {
     password: string;
     displayName?: string;
     email?: string;
+    setupToken?: string;
   }): Promise<SessionUser> {
     const { user: me } = await authApi.setup(payload);
     user.value = { id: me.id, username: me.username, role: me.role };
@@ -64,5 +67,5 @@ export const useAuthStore = defineStore("auth", () => {
     user.value = null;
   }
 
-  return { user, initialized, ready, bootstrap, login, setup, logout, clear };
+  return { user, initialized, setupTokenRequired, ready, bootstrap, login, setup, logout, clear };
 });

@@ -21,6 +21,7 @@ const model = reactive({
   email: "",
   password: "",
   confirm: "",
+  setupToken: "",
 });
 
 const rules = computed<FormRules>(() => ({
@@ -76,6 +77,10 @@ const strengthColor = computed(
 );
 
 async function submit() {
+  if (auth.setupTokenRequired && !model.setupToken) {
+    message.warning(t("auth.setupTokenRequired"));
+    return;
+  }
   try {
     await formRef.value?.validate();
   } catch {
@@ -88,7 +93,12 @@ async function submit() {
       password: model.password,
       displayName: model.displayName || undefined,
       email: model.email || undefined,
+      setupToken: model.setupToken || undefined,
     });
+    // 创建成功后清空密码，避免浏览器密码管理器/表单历史保留凭据
+    model.password = "";
+    model.confirm = "";
+    model.setupToken = "";
     message.success(t("auth.setupSuccess"));
     router.push({ name: "dashboard" });
   } catch (err) {
@@ -116,10 +126,32 @@ async function submit() {
         :rules="rules"
         label-placement="top"
         size="large"
+        autocomplete="off"
         @keydown.enter.prevent="submit"
       >
+        <n-form-item v-if="auth.setupTokenRequired" :label="t('auth.setupToken')">
+          <n-input
+            v-model:value="model.setupToken"
+            type="password"
+            show-password-on="click"
+            :placeholder="t('auth.setupTokenPlaceholder')"
+            :input-props="{
+              autocomplete: 'off',
+              name: 'et-setup-token',
+              spellcheck: false,
+            }"
+          />
+        </n-form-item>
         <n-form-item :label="t('auth.adminUsername')" path="username">
-          <n-input v-model:value="model.username" :placeholder="t('auth.adminUsernamePlaceholder')" />
+          <n-input
+            v-model:value="model.username"
+            :placeholder="t('auth.adminUsernamePlaceholder')"
+            :input-props="{
+              autocomplete: 'off',
+              name: 'et-admin-username',
+              spellcheck: false,
+            }"
+          />
         </n-form-item>
         <n-grid :cols="2" :x-gap="12">
           <n-form-item-gi :label="t('auth.displayName')">
@@ -135,6 +167,11 @@ async function submit() {
             type="password"
             show-password-on="click"
             :placeholder="t('auth.passwordPolicyPlaceholder')"
+            :input-props="{
+              autocomplete: 'new-password',
+              name: 'et-admin-password',
+              spellcheck: false,
+            }"
           />
         </n-form-item>
         <div class="strength">
@@ -157,6 +194,11 @@ async function submit() {
             type="password"
             show-password-on="click"
             :placeholder="t('auth.confirmPasswordPlaceholder')"
+            :input-props="{
+              autocomplete: 'new-password',
+              name: 'et-admin-password-confirm',
+              spellcheck: false,
+            }"
           />
         </n-form-item>
         <n-button type="primary" block size="large" :loading="loading" @click="submit">

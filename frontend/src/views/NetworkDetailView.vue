@@ -340,19 +340,24 @@ const nodeColumns = computed<DataTableColumns<NodeItem>>(() => [
     width: 280,
     fixed: "right",
     render: (row) => {
-      const actions = [
-        h(
-          NButton,
-          {
-            size: "tiny",
-            quaternary: true,
-            type: "primary",
-            onClick: () => openJoin(row),
-          },
-          { icon: () => h(NIcon, { component: LinkOutline }), default: () => t("nodes.actionJoin") },
-        ),
-      ];
+      const actions = [];
       if (canManage.value) {
+        // 接入配置包含网络密钥/凭据密钥，只读用户不可见。
+        actions.push(
+          h(
+            NButton,
+            {
+              size: "tiny",
+              quaternary: true,
+              type: "primary",
+              onClick: () => openJoin(row),
+            },
+            {
+              icon: () => h(NIcon, { component: LinkOutline }),
+              default: () => t("nodes.actionJoin"),
+            },
+          ),
+        );
         actions.push(
           h(
             NButton,

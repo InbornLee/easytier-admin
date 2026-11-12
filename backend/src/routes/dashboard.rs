@@ -35,7 +35,7 @@ async fn traffic_handler(
     Query(query): Query<TrafficQuery>,
     user: AuthUser,
 ) -> AppResult<JsonResponse<Value>> {
-    let hours = query.hours.unwrap_or(1);
+    let hours = query.hours.unwrap_or(1).clamp(1, 24 * 30);
     Ok(JsonResponse(json!({
         "series": get_dashboard_traffic(&state, &user, query.network_id.as_deref(), hours)?,
     })))

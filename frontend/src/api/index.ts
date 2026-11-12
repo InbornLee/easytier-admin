@@ -28,12 +28,16 @@ interface ApiResponse<T> {
 // ---------------------------------------------------------------- Auth
 
 export const authApi = {
-  status: () => client.get<{ initialized: boolean }>("/api/auth/status").then((r) => r.data),
+  status: () =>
+    client
+      .get<{ initialized: boolean; setupTokenRequired?: boolean }>("/api/auth/status")
+      .then((r) => r.data),
   setup: (payload: {
     username: string;
     password: string;
     displayName?: string;
     email?: string;
+    setupToken?: string;
   }) => client.post<{ user: User }>("/api/auth/setup", payload).then((r) => r.data),
   login: (payload: { username: string; password: string }) =>
     client.post<{ user: User }>("/api/auth/login", payload).then((r) => r.data),

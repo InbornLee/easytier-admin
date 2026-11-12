@@ -216,7 +216,10 @@ easytier-core -c config.toml --credential <凭据密钥>
 | `DATA_DIR` | `./data` | 数据库、网络配置、凭据文件、日志目录 |
 | `APP_SECRET` | 自动生成 | JWT 签名 + 敏感字段加密主密钥（生产务必固定） |
 | `JWT_TTL` | `86400` | 登录态有效期（秒） |
+| `COOKIE_PERSIST` | `false` | 是否持久化登录令牌 Cookie；默认会话 Cookie，关闭浏览器即退出 |
 | `COOKIE_SECURE` | `false` | 经 HTTPS 访问时设为 `true` |
+| `TRUST_PROXY` | `false` | 是否信任反向代理的 `X-Forwarded-For` / `X-Real-IP`；仅置于可信反代之后时启用 |
+| `SETUP_TOKEN` | 空 | 可选的首次初始化令牌；非空时 `/api/auth/setup` 必须携带该令牌 |
 | `CORS_ORIGIN` | 空 | 允许的跨域来源，逗号分隔；同源部署可留空 |
 | `FRONTEND_DIST` | `frontend/dist` | 前端静态资源目录 |
 | `EASYTIER_CORE_PATH` | `easytier-core` | `easytier-core` 可执行文件路径 |
@@ -276,6 +279,24 @@ easytier-core -c config.toml --credential <凭据密钥>
 - 管理员密码使用 **Argon2id**（64 MiB / 3 次迭代）哈希存储，并强制强密码策略。
 - `network_secret`、`local_private_key`、凭据私钥等敏感字段使用 **AES-256-GCM** 加密后落库，密钥由 `APP_SECRET` 经 `scrypt` 派生。
 - 登录态使用 httpOnly Cookie（SameSite=Lax），未配置 HTTPS 时请勿将 `COOKIE_SECURE` 设为误导性的 `true`，并在反向代理层启用 TLS。
+- 登录页默认关闭浏览器密码自动填充与保存提示，并在登录成功后清空内存中的密码；登录令牌默认使用**会话 Cookie**（不带 `Max-Age`），关闭浏览器即失效。如需跨浏览器会话保持，可显式设置 `COOKIE_PERSIST=true`。
+- 内置防爆破机制：同一账号 15 分钟内连续失败 5 次后锁定（60 秒起指数退避，单次最长 30 分钟）；同一来源 IP 10 分钟内失败 20 次后锁定 10 分钟。失败计数持久化到 SQLite，服务重启不会重置锁定。
+- 只有在 `TRUST_PROXY=true` 时才信任 `X-Forwarded-For` / `X-Real-IP`；服务直接暴露时请保持 `false`，否则攻击者可伪造来源 IP 绕过登录限流。开启后优先采用 `X-Real-IP`，否则取 `X-Forwarded-For` **最右侧**的合法地址（最近的代理写入，客户端伪造的左侧值会被忽略）。
+- 修改/重置密码后，所有旧登录令牌立即失效（JWT 与当前密码哈希绑定），无需等待 `JWT_TTL` 过期。
+- 登录接口对不存在的用户名也执行同等代价的 Argon2 校验，避免通过响应时间差异枚举账号。
+- 节点接入命令/配置（含网络密钥或凭据密钥）仅对网络的 owner/manage 开放，只读分享用户无法获取。
+- 网络/节点 `flags` 的键名经过白名单校验，防止通过换行或 `[section]` 注入额外 TOML 配置。
+- 所有响应附带 CSP、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Permissions-Policy` 等安全头；`COOKIE_SECURE=true` 时附加 HSTS。
+- 数据库、WAL/SHM、网络配置与日志以 `0600` 权限创建（进程 `umask 077`），避免同机其他账号读取密码哈希或加密密钥。
+- `/api/system/info`（含数据目录）、`/api/system/settings` 仅管理员可访问；`/api/system/health` 不返回版本/环境等指纹信息。
+- **首次部署请务必在暴露到公网之前完成初始化**（`/setup`），或设置 `SETUP_TOKEN` 并在初始化页面填入，否则存在管理员账号被抢注的风险；也可通过 SSH 端口转发或仅内网访问完成初始化。
+
+### 残余风险与部署建议
+
+- 容器当前以 root 运行，并需要 `NET_ADMIN` / `NET_RAW` 与 `/dev/net/tun`；Compose 已启用 `no-new-privileges`。如需进一步收敛，可改用非 root 用户并设置 `cap_drop: ALL` 后仅保留 `NET_ADMIN`、`NET_RAW`、`NET_BIND_SERVICE`（需同步调整 `/data` 与 `/dev/net/tun` 权限）。
+- 登录锁定可被用于针对已知用户名的短期锁定 DoS；建议管理员使用不易猜测的用户名，并在反向代理/WAF 层叠加限流。
+- 建议在 CI 中定期运行 `cargo audit` 与 `pnpm audit --prod`，及时跟进依赖安全公告。
+- 若经反向代理部署，务必设置 `TRUST_PROXY=true`，并确保代理以 `X-Real-IP $remote_addr` 覆盖或使用追加式 `X-Forwarded-For`；否则登录限流会以代理 IP 为准，可能误伤或放大锁定。
 - 建议启用 **安全模式（secure mode）**，共享节点固定 `local_private_key`，客户端可校验共享节点公钥，防止中间人。
 - 临时凭据应遵循最小权限：默认不允许中继、不允许代理网段，并设置合理 TTL。
 

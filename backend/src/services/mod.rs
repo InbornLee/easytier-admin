@@ -3,6 +3,7 @@ pub mod auth;
 pub mod credential;
 pub mod dashboard;
 pub mod log;
+pub mod login_guard;
 pub mod metrics;
 pub mod network;
 pub mod node;

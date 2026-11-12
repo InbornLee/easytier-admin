@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onUnmounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import axios from "axios";
 import type { FormInst } from "naive-ui";
 import { GitNetworkOutline } from "@vicons/ionicons5";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
@@ -17,7 +18,44 @@ const formRef = ref<FormInst | null>(null);
 const loading = ref(false);
 const model = reactive({ username: "", password: "" });
 
+// 失败锁定倒计时：后端返回 429 + details.retryAfter 时禁用按钮并显示剩余时间
+const lockRemaining = ref(0);
+let lockTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopLockTimer(): void {
+  if (lockTimer !== null) {
+    clearInterval(lockTimer);
+    lockTimer = null;
+  }
+}
+
+function startLockout(seconds: number): void {
+  stopLockTimer();
+  lockRemaining.value = Math.max(1, Math.ceil(seconds));
+  lockTimer = setInterval(() => {
+    lockRemaining.value -= 1;
+    if (lockRemaining.value <= 0) {
+      lockRemaining.value = 0;
+      stopLockTimer();
+    }
+  }, 1000);
+}
+
+function lockoutSeconds(error: unknown): number {
+  if (axios.isAxiosError(error)) {
+    const details = (
+      error.response?.data as { details?: { retryAfter?: number } } | undefined
+    )?.details;
+    const seconds = Number(details?.retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  }
+  return 0;
+}
+
+onUnmounted(stopLockTimer);
+
 async function submit() {
+  if (loading.value || lockRemaining.value > 0) return;
   if (!model.username || !model.password) {
     message.warning(t("auth.needCredentials"));
     return;
@@ -25,11 +63,19 @@ async function submit() {
   loading.value = true;
   try {
     await auth.login(model.username, model.password);
+    // 提交后立即清空密码，避免浏览器密码管理器/表单历史保留凭据
+    model.password = "";
     message.success(t("auth.loginSuccess"));
     const redirect = (route.query.redirect as string) || "/";
     router.push(redirect);
   } catch (err) {
-    message.error(extractError(err));
+    const seconds = lockoutSeconds(err);
+    if (seconds > 0) {
+      startLockout(seconds);
+      message.warning(t("auth.lockedRetry", { seconds: Math.ceil(seconds) }));
+    } else {
+      message.error(extractError(err));
+    }
   } finally {
     loading.value = false;
   }
@@ -47,9 +93,23 @@ async function submit() {
         <h1>{{ t("auth.loginTitle") }}</h1>
         <p>{{ t("auth.loginSubtitle") }}</p>
       </div>
-      <n-form ref="formRef" :model="model" size="large" @keydown.enter.prevent="submit">
+      <n-form
+        ref="formRef"
+        :model="model"
+        size="large"
+        autocomplete="off"
+        @keydown.enter.prevent="submit"
+      >
         <n-form-item :label="t('auth.username')">
-          <n-input v-model:value="model.username" :placeholder="t('auth.usernamePlaceholder')" />
+          <n-input
+            v-model:value="model.username"
+            :placeholder="t('auth.usernamePlaceholder')"
+            :input-props="{
+              autocomplete: 'off',
+              name: 'et-admin-username',
+              spellcheck: false,
+            }"
+          />
         </n-form-item>
         <n-form-item :label="t('auth.password')">
           <n-input
@@ -57,10 +117,26 @@ async function submit() {
             type="password"
             show-password-on="click"
             :placeholder="t('auth.passwordPlaceholder')"
+            :input-props="{
+              autocomplete: 'new-password',
+              name: 'et-admin-password',
+              spellcheck: false,
+            }"
           />
         </n-form-item>
-        <n-button type="primary" block size="large" :loading="loading" @click="submit">
-          {{ t("auth.login") }}
+        <n-button
+          type="primary"
+          block
+          size="large"
+          :loading="loading"
+          :disabled="lockRemaining > 0"
+          @click="submit"
+        >
+          {{
+            lockRemaining > 0
+              ? t("auth.lockedRetry", { seconds: lockRemaining })
+              : t("auth.login")
+          }}
         </n-button>
       </n-form>
       <div class="auth-foot">{{ t("app.footer") }}</div>

@@ -5,6 +5,7 @@ use axum::Router;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::easytier::toml::validate_flags;
 use crate::error::{bad_request, AppResult};
 use crate::middleware::{parse_body, AuthUser};
 use crate::services::audit::{record_audit, AuditInput};
@@ -106,6 +107,9 @@ async fn create_handler(
     if input.name.trim().is_empty() {
         return Err(bad_request("节点名称不能为空", None));
     }
+    if let Some(flags) = input.flags.as_ref() {
+        validate_flags(flags).map_err(|msg| bad_request(msg, None))?;
+    }
     require_network_access(&state, &input.network_id, &user, true)?;
     let network_id = input.network_id.clone();
     let (node, credential) = create_node(
@@ -176,6 +180,9 @@ async fn patch_handler(
     let existing = get_node_row_or_throw(&state, &id)?;
     require_network_access(&state, &existing.network_id, &user, true)?;
     let input: NodePatchBody = parse_body(body)?;
+    if let Some(flags) = input.flags.as_ref() {
+        validate_flags(flags).map_err(|msg| bad_request(msg, None))?;
+    }
     let node = update_node(
         &state,
         &id,
@@ -236,7 +243,9 @@ async fn join_handler(
     user: AuthUser,
 ) -> AppResult<JsonResponse<Value>> {
     let node = get_node_row_or_throw(&state, &id)?;
-    require_network_access(&state, &node.network_id, &user, false)?;
+    // 接入配置包含 network_secret / 凭据密钥，属于高度敏感信息：
+    // 只读分享用户不得获取，必须拥有 manage/owner 权限。
+    require_network_access(&state, &node.network_id, &user, true)?;
     let listen_port = query.listen_port.filter(|p| (1..=65535).contains(p));
     let join = get_node_join(&state, &id, listen_port, query.peer.as_deref()).await?;
     record_audit(

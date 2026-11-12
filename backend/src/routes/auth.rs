@@ -25,6 +25,7 @@ struct SetupInput {
     password: String,
     display_name: Option<String>,
     email: Option<String>,
+    setup_token: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -60,7 +61,21 @@ pub fn router() -> Router<SharedState> {
 async fn status(State(state): State<SharedState>) -> AppResult<Json<serde_json::Value>> {
     Ok(Json(json!({
         "initialized": state.db.count_users()? > 0,
+        // 仅告知是否需要初始化令牌，不泄露令牌内容
+        "setupTokenRequired": state.config.setup_token.is_some(),
     })))
+}
+
+/// 常量时间比较，避免通过响应时间推测初始化令牌。
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 async fn setup(
@@ -73,6 +88,21 @@ async fn setup(
         return Err(bad_request("系统已完成初始化，无法重复创建管理员", None));
     }
     let input: SetupInput = parse_body(body)?;
+    // 可选初始化令牌：防止未初始化的实例在公网被抢注管理员。
+    if let Some(expected) = state.config.setup_token.as_deref() {
+        let header_token = headers
+            .get("x-setup-token")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let provided = if header_token.is_empty() {
+            input.setup_token.as_deref().unwrap_or("")
+        } else {
+            header_token
+        };
+        if !constant_time_eq(provided.as_bytes(), expected.as_bytes()) {
+            return Err(AppError::new(403, "初始化令牌无效", "SETUP_TOKEN_INVALID"));
+        }
+    }
     let user = create_user(
         &state,
         CreateUserInput {
@@ -86,7 +116,7 @@ async fn setup(
     )
     .await?;
     let token = sign_token(&state, &user)?;
-    let ip = client_ip(&headers, Some(addr));
+    let ip = client_ip(&headers, Some(addr), state.config.trust_proxy);
     record_audit(
         &state,
         AuditInput {
@@ -108,8 +138,21 @@ async fn setup(
             user,
             token: token.clone(),
         },
-        Some(auth_cookie_value(&token, state.config.jwt_ttl)),
+        Some(auth_cookie_value(
+            &token,
+            state.config.jwt_ttl,
+            state.config.cookie_persist,
+        )),
     ))
+}
+
+fn login_locked(retry_after: i64) -> AppError {
+    AppError::new(
+        429,
+        format!("登录失败次数过多，请在 {retry_after} 秒后重试"),
+        "LOGIN_LOCKED",
+    )
+    .with_details(json!({ "retryAfter": retry_after }))
 }
 
 async fn login(
@@ -118,7 +161,12 @@ async fn login(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> AppResult<Response> {
-    let ip = client_ip(&headers, Some(addr));
+    let input: LoginInput = parse_body(body)?;
+    let ip = client_ip(&headers, Some(addr), state.config.trust_proxy);
+    // 先检查失败锁定（不消耗固定窗口配额），锁定期间直接返回剩余等待时间
+    if let Some(lockout) = state.login_guard.check(&ip, &input.username)? {
+        return Err(login_locked(lockout.retry_after));
+    }
     if !state.rate_login.check(&ip) {
         return Err(AppError::new(
             429,
@@ -126,7 +174,6 @@ async fn login(
             "RATE_LIMITED",
         ));
     }
-    let input: LoginInput = parse_body(body)?;
     let user = verify_login(&state, &input.username, &input.password).await?;
     let user_agent = headers
         .get("user-agent")
@@ -134,6 +181,7 @@ async fn login(
         .map(|s| s.to_string());
     match user {
         Some(user) => {
+            state.login_guard.record_success(&ip, &input.username)?;
             let token = sign_token(&state, &user)?;
             record_audit(
                 &state,
@@ -153,10 +201,15 @@ async fn login(
                     user,
                     token: token.clone(),
                 },
-                Some(auth_cookie_value(&token, state.config.jwt_ttl)),
+                Some(auth_cookie_value(
+                    &token,
+                    state.config.jwt_ttl,
+                    state.config.cookie_persist,
+                )),
             ))
         }
         None => {
+            let lockout = state.login_guard.record_failure(&ip, &input.username)?;
             record_audit(
                 &state,
                 AuditInput {
@@ -170,6 +223,11 @@ async fn login(
                     user_agent,
                 },
             );
+            // 账号不存在与密码错误返回完全一致的提示，避免用户名枚举；
+            // 达到失败阈值后改为返回锁定与剩余秒数，前端可据此倒计时。
+            if let Some(lockout) = lockout {
+                return Err(login_locked(lockout.retry_after));
+            }
             Err(bad_request("用户名或密码错误", None))
         }
     }
@@ -203,7 +261,7 @@ async fn change_password_handler(
             resource_type: None,
             resource_id: None,
             detail: None,
-            ip: Some(client_ip(&headers, Some(addr))),
+            ip: Some(client_ip(&headers, Some(addr), state.config.trust_proxy)),
             user_agent: headers
                 .get("user-agent")
                 .and_then(|v| v.to_str().ok())

@@ -52,14 +52,43 @@ pub fn default_flags() -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// flags 键名白名单：仅允许 EasyTier 配置使用的标识符，
+/// 防止通过换行 / `[section]` 等字符注入额外 TOML 配置。
+pub fn is_valid_flag_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 64
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// 校验用户提交的 flags；返回可读的错误信息。
+pub fn validate_flags(flags: &Map<String, Value>) -> Result<(), String> {
+    for (key, value) in flags {
+        if !is_valid_flag_key(key) {
+            return Err(format!("无效的 flags 键名: {key}"));
+        }
+        match value {
+            Value::Bool(_) | Value::Number(_) => {}
+            Value::String(s) if s.chars().count() <= 1024 => {}
+            Value::String(_) => return Err(format!("flags.{key} 字符串过长")),
+            _ => return Err(format!("flags.{key} 仅支持字符串、数字或布尔值")),
+        }
+    }
+    Ok(())
+}
+
 /// 合并默认 flags 与用户覆盖项，得到完整的 flags 对象。
+/// 非法键名会被丢弃（API 层另有校验），避免污染 TOML。
 pub fn merge_flags(overrides: &Map<String, Value>) -> Map<String, Value> {
     let mut merged = Map::new();
     for (key, value) in default_flags() {
         merged.insert(key.to_string(), value);
     }
     for (key, value) in overrides {
-        merged.insert(key.clone(), value.clone());
+        if is_valid_flag_key(key) {
+            merged.insert(key.clone(), value.clone());
+        }
     }
     merged
 }

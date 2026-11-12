@@ -23,18 +23,17 @@ pub fn router() -> Router<SharedState> {
         )
 }
 
-async fn health_handler(State(state): State<SharedState>) -> JsonResponse<Value> {
+async fn health_handler() -> JsonResponse<Value> {
+    // 健康检查保持最小信息，不暴露版本、环境等指纹。
     JsonResponse(json!({
         "status": "ok",
         "time": now_ms(),
-        "version": env!("CARGO_PKG_VERSION"),
-        "env": state.config.env,
     }))
 }
 
 async fn info_handler(
     State(state): State<SharedState>,
-    _user: AuthUser,
+    _admin: AdminUser,
 ) -> AppResult<JsonResponse<Value>> {
     Ok(JsonResponse(json!({
         "version": env!("CARGO_PKG_VERSION"),

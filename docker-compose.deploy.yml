@@ -18,6 +18,9 @@ services:
     restart: unless-stopped
     # 使用内置 init 进程转发信号
     init: true
+    # 禁止容器内进程通过 setuid/setgid 提升权限
+    security_opt:
+      - no-new-privileges:true
 
     # EasyTier 需要创建 TUN 设备并配置网络
     cap_add:
@@ -48,6 +51,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # 若经 HTTPS 反向代理访问，设为 true（Cookie 加 Secure）
       - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      # 是否持久化登录令牌 Cookie（默认 false：关闭浏览器即退出）
+      - COOKIE_PERSIST=${COOKIE_PERSIST:-false}
+      # 反向代理后置 true 以获取真实客户端 IP；直接暴露时保持 false
+      - TRUST_PROXY=${TRUST_PROXY:-false}
+      # 可选：首次初始化令牌（防止未初始化实例被抢注管理员）
+      - SETUP_TOKEN=${SETUP_TOKEN:-}
     volumes:
       - ${DATA_DIR:-./data}:/data
 

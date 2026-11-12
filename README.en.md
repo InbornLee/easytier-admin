@@ -216,7 +216,10 @@ easytier-core -c config.toml --credential <credential-secret>
 | `DATA_DIR` | `./data` | Directory for the database, network configs, credential files and logs |
 | `APP_SECRET` | auto-generated | Master key for JWT signing and sensitive-field encryption (must be fixed in production) |
 | `JWT_TTL` | `86400` | Login session lifetime (seconds) |
+| `COOKIE_PERSIST` | `false` | Persist the login token cookie; by default it is a session cookie that expires when the browser closes |
 | `COOKIE_SECURE` | `false` | Set to `true` when served over HTTPS |
+| `TRUST_PROXY` | `false` | Trust `X-Forwarded-For` / `X-Real-IP` from a reverse proxy; enable only behind a trusted proxy |
+| `SETUP_TOKEN` | empty | Optional first-run setup token; when set, `/api/auth/setup` must include it |
 | `CORS_ORIGIN` | empty | Allowed CORS origins, comma-separated; can be empty for same-origin deployment |
 | `FRONTEND_DIST` | `frontend/dist` | Frontend static assets directory |
 | `EASYTIER_CORE_PATH` | `easytier-core` | Path to the `easytier-core` executable |
@@ -278,6 +281,24 @@ All endpoints are prefixed with `/api`. Except for `/api/auth/status`, `/api/aut
 - Admin passwords are stored hashed with **Argon2id** (64 MiB / 3 iterations) and a strong password policy is enforced.
 - Sensitive fields such as `network_secret`, `local_private_key` and credential secrets are encrypted at rest with **AES-256-GCM**; the key is derived from `APP_SECRET` via `scrypt`.
 - Sessions use httpOnly cookies (SameSite=Lax). Do not set `COOKIE_SECURE` to a misleading `true` when HTTPS is not configured; terminate TLS at a reverse proxy instead.
+- Browser password autofill/save prompts are disabled on the login page and the password is cleared from memory after a successful sign-in. The token cookie is a **session cookie** by default (no `Max-Age`) and expires when the browser closes; set `COOKIE_PERSIST=true` to keep it across browser sessions.
+- Built-in brute-force protection: an account is locked after 5 consecutive failures within 15 minutes (starting at 60s with exponential backoff, capped at 30 minutes), and a source IP is locked for 10 minutes after 20 failures within 10 minutes. Failure counters are persisted in SQLite and survive restarts.
+- `X-Forwarded-For` / `X-Real-IP` are honored only when `TRUST_PROXY=true`; keep it `false` when the service is directly exposed, otherwise attackers can spoof the source IP and bypass login throttling. When enabled, `X-Real-IP` is preferred; otherwise the **rightmost** valid `X-Forwarded-For` entry is used (written by the nearest proxy, so spoofed left-side values are ignored).
+- Changing/resetting a password invalidates all existing tokens immediately (the JWT is bound to the current password hash); no need to wait for `JWT_TTL`.
+- The login endpoint runs an equally expensive Argon2 verification for non-existent usernames, preventing account enumeration through response timing.
+- Node join commands/configs (containing the network or credential secret) are only available to network owners/managers; read-only shared users cannot retrieve them.
+- Network/node `flags` keys are allow-listed to prevent injecting extra TOML configuration via newlines or `[section]`.
+- All responses carry CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Permissions-Policy`; HSTS is added when `COOKIE_SECURE=true`.
+- Database, WAL/SHM, network configs and logs are created with `0600` permissions (`umask 077`), so other local accounts cannot read password hashes or encryption keys.
+- `/api/system/info` (data directory) and `/api/system/settings` are admin-only; `/api/system/health` no longer exposes version/environment fingerprinting data.
+- **Complete the initial setup before exposing the service to the Internet** (the `/setup` endpoint), or set `SETUP_TOKEN` and enter it on the setup page; otherwise an attacker may claim the administrator account first. SSH port forwarding or an internal-only network can also be used for initialization.
+
+### Residual risks and deployment guidance
+
+- The container currently runs as root and requires `NET_ADMIN` / `NET_RAW` plus `/dev/net/tun`; Compose enables `no-new-privileges`. For further hardening, run as a non-root user with `cap_drop: ALL` and only `NET_ADMIN`, `NET_RAW`, `NET_BIND_SERVICE` (adjust `/data` and `/dev/net/tun` permissions accordingly).
+- Login lockout can be abused for short-term denial of service against known usernames; use hard-to-guess admin usernames and add proxy/WAF rate limiting.
+- Run `cargo audit` and `pnpm audit --prod` periodically in CI to track dependency advisories.
+- Behind a reverse proxy, set `TRUST_PROXY=true` and make sure the proxy overwrites `X-Real-IP` (`$remote_addr`) or appends to `X-Forwarded-For`; otherwise login throttling will key on the proxy IP and may cause false lockouts.
 - Enabling **secure mode** is recommended: the shared node uses a fixed `local_private_key` and clients can verify the shared node's public key to prevent man-in-the-middle attacks.
 - Temporary credentials should follow least privilege: by default no relay, no proxy CIDRs allowed, and a reasonable TTL.
 
